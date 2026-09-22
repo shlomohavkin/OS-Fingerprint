@@ -68,8 +68,10 @@ struct tcp_fingerprint {
     bool DF_test;
     // uint8_t T_test; // first need the U1 and IE tests to be implemented
     uint8_t TG_test;
-    char Q_test[2]; // Reserved bit quirk test + Urgent pointer quirk test
-    char S_test[2]; 
+    char Q_test[3]; // Reserved bit quirk test + Urgent pointer quirk test + null terminator
+    char S_test[3]; // Sequence number test + null terminator
+    char A_test[3]; // Acknowledgment number test + null terminator
+    char F_test[8]; // Flags test + null terminator
 };
 
 struct os_fingerprint {

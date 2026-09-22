@@ -388,9 +388,11 @@ int calculate_t1_test(struct tcp_probe_res *tcp_probe_res, struct tcp_fingerprin
         return -1;
     }
 
+    // R (Received) and DF (Don't Fragment) tests
     tcp_fingerprint->R_test = tcp_probe_res[0].status == PROBE_RECEIVED;
     tcp_fingerprint->DF_test = (tcp_probe_res[0].response.ip_fragoff & IP_DF) != 0;
 
+    // TG (TTL guess) test
     if (tcp_probe_res[0].response.ip_ttl < 32) {
         tcp_fingerprint->TG_test = 32;
     } else if (tcp_probe_res[0].response.ip_ttl < 64) {
@@ -403,19 +405,52 @@ int calculate_t1_test(struct tcp_probe_res *tcp_probe_res, struct tcp_fingerprin
         tcp_fingerprint->TG_test = 0; // Unknown or invalid TTL
     }
 
+    // Q (Quirks)test
     if (tcp_probe_res[0].response.app_protocol.tcp_ap.reserved != 0 &&
         tcp_probe_res[0].response.app_protocol.tcp_ap.urg_pointer != 0) {
-        strcpy(tcp_fingerprint->Q_test, "RU");
+        strcpy(tcp_fingerprint->Q_test, "RU\0");
     } else if (tcp_probe_res[0].response.app_protocol.tcp_ap.reserved != 0) {
-        strcpy(tcp_fingerprint->Q_test, "R");
+        strcpy(tcp_fingerprint->Q_test, "R\0");
     } else if (tcp_probe_res[0].response.app_protocol.tcp_ap.urg_pointer != 0) {
-        strcpy(tcp_fingerprint->Q_test, "U");
+        strcpy(tcp_fingerprint->Q_test, "U\0");
     } else {
         tcp_fingerprint->Q_test[0] = '\0'; // No quirks
     }
 
+    // S (Sequence) test
+    if (tcp_probe_res[0].response.app_protocol.tcp_ap.seq == 0) {
+        strcpy(tcp_fingerprint->S_test, "Z\0");
+    } else if (tcp_probe_res[0].response.app_protocol.tcp_ap.seq == tcp_probe_res[0].response.app_protocol.tcp_ap.ack) {
+        strcpy(tcp_fingerprint->S_test, "A\0");
+    } else if (tcp_probe_res[0].response.app_protocol.tcp_ap.seq == tcp_probe_res[0].response.app_protocol.tcp_ap.ack + 1) {
+        strcpy(tcp_fingerprint->S_test, "A+\0");
+    } else {
+        strcpy(tcp_fingerprint->S_test, "O\0");
+    }
 
-    
+    // A (Acknowledgment) test
+    if (tcp_probe_res[0].response.app_protocol.tcp_ap.ack == 0) {
+        strcpy(tcp_fingerprint->A_test, "Z\0");
+    } else if (tcp_probe_res[0].response.app_protocol.tcp_ap.ack == tcp_probe_res[0].response.app_protocol.tcp_ap.seq) {
+        strcpy(tcp_fingerprint->A_test, "S\0");
+    } else if (tcp_probe_res[0].response.app_protocol.tcp_ap.ack == tcp_probe_res[0].response.app_protocol.tcp_ap.seq + 1) {
+        strcpy(tcp_fingerprint->A_test, "S+\0");
+    } else {
+        strcpy(tcp_fingerprint->A_test, "O\0");
+    }
+
+    // F (Flags) test
+    uint8_t flags = tcp_probe_res[0].response.app_protocol.tcp_ap.flags;
+    char flag_str_res[8] = {0}; // 7 flags + null terminator
+    if (flags & 0x40) strcat(flag_str_res, "E"); // ECN-Echo
+    if (flags & TH_URG) strcat(flag_str_res, "U");
+    if (flags & TH_ACK) strcat(flag_str_res, "A");
+    if (flags & TH_PUSH) strcat(flag_str_res, "P");
+    if (flags & TH_RST) strcat(flag_str_res, "R");
+    if (flags & TH_SYN) strcat(flag_str_res, "S");
+    if (flags & TH_FIN) strcat(flag_str_res, "F");
+    strncpy(tcp_fingerprint->F_test, flag_str_res, sizeof(tcp_fingerprint->F_test) - 1);
+    tcp_fingerprint->F_test[sizeof(tcp_fingerprint->F_test) - 1] = '\0';
 
     return 1;
 }

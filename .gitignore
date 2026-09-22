@@ -1,0 +1,13 @@
+# Compiled program and build files
+/os-fingerprint
+/build/
+*.o
+*.a
+*.so
+
+# Crash dumps
+core
+core.*
+
+# Local secrets
+.env

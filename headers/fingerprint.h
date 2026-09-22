@@ -1,0 +1,92 @@
+#ifndef FINGERPRINT_H
+#define FINGERPRINT_H
+
+#include "packet.h"
+#include "structures.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <math.h>
+#include <netinet/ip.h>
+
+
+#define SEQ_PROBE_COUNT 6
+#define OPS_STRING_MAX_LENGTH 128
+#define OPTIONS_MAX_LENGTH 40
+
+
+
+enum ip_id_kind {
+    IP_ID_UNAVAILABLE = 0,
+    IP_ID_ZERO,                  // Z
+    IP_ID_INCREMENTAL,           // I
+    IP_ID_BROKEN_INCREMENTAL,    // BI
+    IP_ID_RANDOM_POSITIVE,       // RI
+    IP_ID_RANDOM,                // RD
+    IP_ID_CONSTANT            
+};
+
+struct ip_id_fingerprint {
+    enum ip_id_kind kind;
+    uint16_t constant_value;     // used for IP_ID_CONSTANT
+};
+
+enum shared_sequence {
+    SHARED_SEQUENCE_UNAVAILABLE = 0,
+    SHARED_SEQUENCE_SAME,        // S
+    SHARED_SEQUENCE_OTHER        // O
+};
+
+enum timestamp_kind {
+    TIMESTAMP_UNAVAILABLE = 0,   // Insufficient information
+    TIMESTAMP_UNSUPPORTED,       // U: timestamp option unsupported
+    TIMESTAMP_ZERO,              // 0: observed zero timestamp
+    TIMESTAMP_RATE               // Encoded rate, printed as hex
+};
+
+struct timestamp_fingerprint {
+    enum timestamp_kind kind;
+    uint32_t encoded_rate;      // used for TIMESTAMP_RATE
+};
+
+
+struct seq_fingerprint {
+    uint32_t gcd;
+    uint32_t isr;
+    uint32_t sp;
+
+    struct ip_id_fingerprint ti;
+    struct ip_id_fingerprint ci;
+    struct ip_id_fingerprint ii;
+
+    enum shared_sequence ss;
+    struct timestamp_fingerprint ts;
+};
+
+struct tcp_fingerprint {
+    bool R_test;
+    bool DF_test;
+    // uint8_t T_test; // first need the U1 and IE tests to be implemented
+    uint8_t TG_test;
+    char Q_test[2]; // Reserved bit quirk test + Urgent pointer quirk test
+    char S_test[2]; 
+};
+
+struct os_fingerprint {
+    struct seq_fingerprint seq;       // SEQ test 
+    char ops[SEQ_PROBE_COUNT][OPS_STRING_MAX_LENGTH];       // O1–O6
+    uint16_t win[SEQ_PROBE_COUNT];       // W1–W6
+    // struct ecn_fingerprint ecn;       // ECN
+    struct tcp_fingerprint tcp[7];    // T1–T7
+    // struct u1_fingerprint u1;         // U1
+    // struct ie_fingerprint ie;         // IE
+
+    bool reserved_bit_set; // Reserved bit quirk test
+    bool urgent_pointer_set; // Urgent pointer quirk test
+};
+
+
+
+
+
+#endif /* FINGERPRINT_H */

@@ -1,0 +1,51 @@
+{
+    "tasks": [
+        {
+            "label": "Build project",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "rm -f \"${workspaceFolder}/os-fingerprint\" && sudo /usr/bin/gcc -I\"${workspaceFolder}/headers\" -fdiagnostics-color=always -g \"${workspaceFolder}\"/src/*.c -o \"${workspaceFolder}/os-fingerprint\" -lpcap"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Compile all C source files in src and include headers from headers."
+        },
+        {
+            "label": "Run program",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "sudo gcc -I\"${workspaceFolder}/headers\" -g \"${workspaceFolder}\"/src/*.c -o \"${workspaceFolder}/os-fingerprint\" -lpcap && \"${workspaceFolder}/os-fingerprint\" 1.1.1.1 44,8888"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Clean binaries",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-lc",
+                "rm -f \"${workspaceFolder}/os-fingerprint\" \"${workspaceFolder}/*.out\" \"${workspaceFolder}/src/*.o\""
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": []
+        }
+    ],
+    "version": "2.0.0"
+}

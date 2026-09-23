@@ -14,7 +14,7 @@
 #define SEQ_PROBE_COUNT 6
 #define OPS_STRING_MAX_LENGTH 128
 #define OPTIONS_MAX_LENGTH 40
-
+#define UNAVAILABLE_SIG UINT32_MAX
 
 
 enum ip_id_kind {

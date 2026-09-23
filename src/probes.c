@@ -1,7 +1,7 @@
 #include <probes.h>
 
 
-struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
+struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
     struct tcp_probe *tcp_probes = malloc(6 * sizeof(struct tcp_probe));
     if (tcp_probes == NULL) {
         perror("Failed to allocate memory for TCP probes");
@@ -17,8 +17,10 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
         .dest_port = dest_port,
         .seq_num = base_seq_num,
         .ack_num = base_ack_num,
-        .tcp_flags = 0x02, // SYN
+        .tcp_flags = TH_SYN, // SYN
         .window_size = 1,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
         .tcp_options = {
             TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
             TCPOPT_NOP, // NOP
@@ -26,7 +28,7 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
             TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
             0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
             0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
-            TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED // SACK permitted
+            TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
         },
         .tcp_options_len = 20
     };
@@ -36,8 +38,10 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
         .dest_port = dest_port,
         .seq_num = base_seq_num + 1,
         .ack_num = base_ack_num,
-        .tcp_flags = 0x02, // SYN
+        .tcp_flags = TH_SYN, // SYN
         .window_size = 63,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
         .tcp_options = {
             TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x05, 0x78, // MSS = 1400
             TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x00, // winow scale = 0
@@ -45,7 +49,7 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
             TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
             0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
             0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
-            TCPOPT_EOL // EOL
+            TCPOPT_EOL, // EOL
         },
         .tcp_options_len = 20
     };
@@ -55,8 +59,10 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
         .dest_port = dest_port,
         .seq_num = base_seq_num + 2,
         .ack_num = base_ack_num,
-        .tcp_flags = 0x02, // SYN
+        .tcp_flags = TH_SYN, // SYN
         .window_size = 4,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
         .tcp_options = {
             TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
             0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
@@ -75,15 +81,17 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
         .dest_port = dest_port,
         .seq_num = base_seq_num + 3,
         .ack_num = base_ack_num,
-        .tcp_flags = 0x02, // SYN
+        .tcp_flags = TH_SYN, // SYN
         .window_size = 4,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
         .tcp_options = {
             TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
             TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
             0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
             0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
             TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
-            TCPOPT_EOL // EOL
+            TCPOPT_EOL, // EOL
         },
         .tcp_options_len = 16
     };
@@ -93,8 +101,10 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
         .dest_port = dest_port,
         .seq_num = base_seq_num + 4,
         .ack_num = base_ack_num,
-        .tcp_flags = 0x02, // SYN
+        .tcp_flags = TH_SYN, // SYN
         .window_size = 16,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
         .tcp_options = {
             TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x02, 0x18, // MSS = 536
             TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
@@ -102,7 +112,7 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
             0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
             0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
             TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
-            TCPOPT_EOL // EOL
+            TCPOPT_EOL, // EOL
         },
         .tcp_options_len = 20
     };
@@ -112,8 +122,10 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
         .dest_port = dest_port,
         .seq_num = base_seq_num + 5,
         .ack_num = base_ack_num,
-        .tcp_flags = 0x02, // SYN
+        .tcp_flags = TH_SYN, // SYN
         .window_size = 512,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
         .tcp_options = {
             TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x01, 0x09, // MSS = 265
             TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
@@ -128,7 +140,7 @@ struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_
     return tcp_probes;
 }
 
-struct icmp_probe *ICMPEchoProbeSpec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
+struct icmp_probe *ICMP_echo_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
     struct icmp_probe *icmp_probes = malloc(2 * sizeof(struct icmp_probe));
     srand((unsigned)time(NULL));
 
@@ -163,13 +175,42 @@ struct icmp_probe *ICMPEchoProbeSpec(uint16_t source_port, uint16_t dest_port, c
     };
 
     if (icmp_probes[0].payload == NULL || icmp_probes[1].payload == NULL) {
-        free(icmp_probes[0].payload);
-        free(icmp_probes[1].payload);
         free(icmp_probes);
         perror("Failed to allocate memory for ICMP payload");
         exit(EXIT_FAILURE);
     }
-
-
     return icmp_probes;
+}
+
+struct tcp_probe *tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
+    struct tcp_probe *tcp_probe = malloc(sizeof(struct tcp_probe));
+    if (tcp_probe == NULL) {
+        perror("Failed to allocate memory for TCP probes");
+        exit(EXIT_FAILURE);
+    }
+
+    uint32_t base_seq_num = rand(); 
+
+    *tcp_probe = (struct tcp_probe){
+        .dest_ip = dest_ip,
+        .source_port = source_port,
+        .dest_port = dest_port,
+        .seq_num = base_seq_num,
+        .ack_num = 0,
+        .tcp_flags = TH_SYN | 0x40 | 0x80, // set SYN, ECN-Echo, and CWR flags
+        .window_size = 3,
+        .urgent_pointer = 0xF7F5,
+        .reseved_bit = true,
+        .tcp_options = {
+            TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
+            TCPOPT_NOP, // NOP
+            TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x05, 0xB4, // MSS = 1460
+            TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
+            TCPOPT_NOP, // NOP
+            TCPOPT_NOP, // NOP
+        },
+        .tcp_options_len = 20
+    };
+
+    return tcp_probe;
 }

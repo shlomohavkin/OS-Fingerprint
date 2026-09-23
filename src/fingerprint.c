@@ -1,18 +1,5 @@
 #include "fingerprint.h"
 
-#include <stdbool.h>
-#include <stdint.h>
-#include <stddef.h>
-#include <stdio.h>
-#include <string.h>
-#include <math.h>
-#include <time.h>
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
-#include <zlib.h>
-
-
-#define UNAVAILABLE_SIG UINT32_MAX
 
 struct seq_samples {
     size_t count;
@@ -51,7 +38,7 @@ static struct seq_samples find_seq_samples(const struct tcp_probe_res *probes) {
     return samples;
 }
 
-static bool calculate_rates(const struct tcp_probe_res *probes, struct seq_samples *samples) {
+static bool calculate_diffs_and_rates(const struct tcp_probe_res *probes, struct seq_samples *samples) {
     if (samples->count < 2) {
         return false;
     }
@@ -62,9 +49,8 @@ static bool calculate_rates(const struct tcp_probe_res *probes, struct seq_sampl
         if (elapsed <= 0.0) {
             return false;
         }
-        samples->diffs[i] = seq_diff_calc(
-            probes[next].response.app_protocol.tcp_ap.seq,
-            probes[current].response.app_protocol.tcp_ap.seq);
+        samples->diffs[i] = seq_diff_calc(probes[next].response.app_protocol.tcp_ap.seq,
+                                        probes[current].response.app_protocol.tcp_ap.seq);
         samples->rates[i] = (double)samples->diffs[i] / elapsed;
         if (!isfinite(samples->rates[i])) {
             return false;
@@ -119,7 +105,7 @@ double standard_deviation(const double *arr, size_t len) {
 /* TEST CALCULATION FUNCTIONS */
 uint32_t calculate_gcd_test(struct tcp_probe_res *probes) {
     struct seq_samples samples = find_seq_samples(probes);
-    if (samples.count < 4 || !calculate_rates(probes, &samples)) {
+    if (samples.count < 4 || !calculate_diffs_and_rates(probes, &samples)) {
         return UNAVAILABLE_SIG;
     }
     return gcd_array(samples.diffs, samples.count - 1);
@@ -127,7 +113,7 @@ uint32_t calculate_gcd_test(struct tcp_probe_res *probes) {
 
 uint32_t calculate_isr_test(struct tcp_probe_res *probes) {
     struct seq_samples samples = find_seq_samples(probes);
-    if (samples.count < 4 || !calculate_rates(probes, &samples)) {
+    if (samples.count < 4 || !calculate_diffs_and_rates(probes, &samples)) {
         return UNAVAILABLE_SIG;
     }
 
@@ -145,7 +131,7 @@ uint32_t calculate_isr_test(struct tcp_probe_res *probes) {
 
 uint32_t calculate_sp_test(struct tcp_probe_res *probes, uint32_t gcd_value) {
     struct seq_samples samples = find_seq_samples(probes);
-    if (samples.count < 4 || !calculate_rates(probes, &samples) ||
+    if (samples.count < 4 || !calculate_diffs_and_rates(probes, &samples) ||
         gcd_value == UNAVAILABLE_SIG) {
         return UNAVAILABLE_SIG;
     }
@@ -194,9 +180,9 @@ struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct tcp_probe_res *p
         uint16_t curr_id = probes[samples.index[i]].response.ip_id;
         uint16_t next_id = probes[samples.index[i + 1]].response.ip_id;
 
-        // We first calculate the difference in the 32bit reprsentation 
-        // of the IP IDs to handle wraparound correctly for the RD flag. 
-        // Then we check the rest with the 16bit rep.
+        // To match Nmap's implementation: we first check RD on the 32-bit
+        // subtraction before reducing the difference to 16 bits.
+        // This can classify a decreasing IP ID as RD.
         uint32_t raw_diff = (uint32_t)next_id - (uint32_t)curr_id;
         if (raw_diff > 20000u) {
             result.kind = IP_ID_RANDOM;
@@ -307,7 +293,8 @@ int calculate_seq_fingerprint(struct tcp_probe_res *probes, struct seq_fingerpri
     fingerprint->ti = calculate_ip_id_fingerprints_ti(probes);
     fingerprint->ts = calculate_timestamp_fingerprint(probes);
     fingerprint->metrics_present = fingerprint->isr != UNAVAILABLE_SIG &&
-                                    fingerprint->sp != UNAVAILABLE_SIG;
+                                    fingerprint->sp != UNAVAILABLE_SIG && 
+                                    fingerprint->gcd != UNAVAILABLE_SIG;
     /* CI, II and SS remain unavailable until their additional probes exist. */
     return 1;
 }

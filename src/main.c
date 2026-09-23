@@ -76,7 +76,7 @@ int main(int argc, char **argv)
 
 
     struct tcp_probe_res tcp_probe_res[6] = {0};
-    struct tcp_probe *tcp_probes = sequenceGenerationTCPSpec(SRC_PORT_INIT, atoi(OPEN_PORT), target_IP);
+    struct tcp_probe *tcp_probes = sequence_generation_TCP_spec(SRC_PORT_INIT, atoi(OPEN_PORT), target_IP);
     uint8_t *tcp_packets_t1[6] = {0};
     size_t tcp_packet_len[6] = {0};
 
@@ -86,12 +86,12 @@ int main(int argc, char **argv)
         tcp_probe_res[i].probe_sent = tcp_probes[i];
         tcp_probe_res[i].response = (struct parsed_info){0};
 
-        tcp_packets_t1[i] = constructTCPPacket(&tcp_probes[i], "172.25.0.230", &tcp_packet_len[i]);
-        printf("Constructed TCP packet number %d of length: %lu bytes\n", i + 1, tcp_packet_len[i]);
+        tcp_packets_t1[i] = construct_TCP_packet(&tcp_probes[i], "172.25.0.230", &tcp_packet_len[i]);
+        printf("Constructed SequenceTCP packet number %d of length: %lu bytes\n", i + 1, tcp_packet_len[i]);
     }
 
     for (int i = 0; i < 6; i++) {
-        printf("Sending packet %d to: %s\n", i + 1, target_IP);
+        printf("Sending sequence TCP packet %d to: %s\n", i + 1, target_IP);
         tcp_probe_res[i].status = PROBE_NO_RESPONSE;
         tcp_probe_res[i].sent_at = (struct timespec){0};
 

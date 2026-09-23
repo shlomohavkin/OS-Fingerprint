@@ -5,7 +5,7 @@
 #define ETHERNET_HEADER_SIZE 14
 
 
-uint8_t *constructTCPPacket(struct tcp_probe *tcp_probe_spec, char *source_ip, size_t *packet_len) {
+uint8_t *construct_TCP_packet(struct tcp_probe *tcp_probe_spec, char *source_ip, size_t *packet_len) {
     if (tcp_probe_spec == NULL || source_ip == NULL || packet_len == NULL) {
         perror("Invalid arguments to constructTCPPacket");
         return NULL; 
@@ -74,7 +74,7 @@ uint8_t *constructTCPPacket(struct tcp_probe *tcp_probe_spec, char *source_ip, s
     memcpy(checksum_input + 10, &tcp_length_net, 2); // TCP length
     memcpy(checksum_input + 12, packet + sizeof(ip), tcp_len); // TCP header + options
 
-    tcp.check = htons(calculateChecksum(checksum_input, 12 + tcp_len));
+    tcp.check = htons(calculate_checksum(checksum_input, 12 + tcp_len));
 
     memcpy(packet + sizeof(ip), &tcp, sizeof(tcp)); // Update the TCP header with the checksum
 
@@ -82,8 +82,7 @@ uint8_t *constructTCPPacket(struct tcp_probe *tcp_probe_spec, char *source_ip, s
     return packet; // Success
 }
 
-
-uint8_t *constructICMPPacket(struct icmp_probe *icmp_probe_spec, char *source_ip, size_t *packet_len) {
+uint8_t *construct_ICMP_packet(struct icmp_probe *icmp_probe_spec, char *source_ip, size_t *packet_len) {
     if (icmp_probe_spec == NULL || source_ip == NULL || packet_len == NULL ) {
         return NULL; // Invalid arguments
     }
@@ -134,7 +133,7 @@ uint8_t *constructICMPPacket(struct icmp_probe *icmp_probe_spec, char *source_ip
     memcpy(packet + sizeof(ip), &icmp, sizeof(icmp)); // ICMP header
     memcpy(packet + sizeof(ip) + sizeof(icmp), icmp_probe_spec->payload, icmp_probe_spec->payload_len); // payload
 
-    uint16_t icmp_checksum = calculateChecksum((uint8_t *)(packet + sizeof(ip)), sizeof(icmp) + icmp_probe_spec->payload_len);
+    uint16_t icmp_checksum = calculate_checksum((uint8_t *)(packet + sizeof(ip)), sizeof(icmp) + icmp_probe_spec->payload_len);
     icmp.checksum = htons(icmp_checksum);
     memcpy(packet + sizeof(ip), &icmp, sizeof(icmp)); // Update the ICMP
     
@@ -142,8 +141,7 @@ uint8_t *constructICMPPacket(struct icmp_probe *icmp_probe_spec, char *source_ip
     return packet; // Success
 }
 
-
-uint16_t calculateChecksum(uint8_t *data, size_t len) {
+uint16_t calculate_checksum(uint8_t *data, size_t len) {
     uint32_t sum = 0;
 
 

@@ -59,9 +59,10 @@ struct parsed_info {
 
 
 
-uint8_t *constructTCPPacket(struct tcp_probe *tcp_probe_spec, char *source_ip, size_t *packet_len);
-uint8_t *constructICMPPacket(struct icmp_probe *icmp_probe_spec, char *source_ip, size_t *packet_len);
-uint16_t calculateChecksum(uint8_t *data, size_t len);
+
+uint8_t *construct_TCP_packet(struct tcp_probe *tcp_probe_spec, char *source_ip, size_t *packet_len);
+uint8_t *construct_ICMP_packet(struct icmp_probe *icmp_probe_spec, char *source_ip, size_t *packet_len);
+uint16_t calculate_checksum(uint8_t *data, size_t len);
 
 
 struct parsed_info tcp_probe_parse(const u_char *bytes, struct pcap_pkthdr *header);

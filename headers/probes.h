@@ -20,6 +20,10 @@ struct tcp_probe {
     uint32_t ack_num;
     uint8_t tcp_flags;
     uint16_t window_size;
+
+    uint16_t urgent_pointer;
+    bool reseved_bit;
+
     uint8_t tcp_options[40];
     size_t tcp_options_len;
 };
@@ -39,7 +43,7 @@ struct icmp_probe {
     size_t payload_len;
 };
 
-struct tcp_probe *sequenceGenerationTCPSpec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
-struct icmp_probe *ICMPEchoProbeSpec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
+struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
+struct icmp_probe *ICMP_echo_probeSpec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
 
 #endif /* PROBES_H */

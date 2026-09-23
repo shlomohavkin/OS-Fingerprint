@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <netinet/ip.h>
+#include <zlib.h> // For CRC32 calculation
 
 
 #define SEQ_PROBE_COUNT 6
@@ -61,6 +62,9 @@ struct seq_fingerprint {
 
     enum shared_sequence ss;
     struct timestamp_fingerprint ts;
+
+    bool metrics_present; // Indicates if the metrics (ISR and SP) are present
+
 };
 
 struct tcp_fingerprint {
@@ -72,6 +76,7 @@ struct tcp_fingerprint {
     char S_test[3]; // Sequence number test + null terminator
     char A_test[3]; // Acknowledgment number test + null terminator
     char F_test[8]; // Flags test + null terminator
+    uint32_t RD_test; // RST packet data CRC32 checksum
 };
 
 struct os_fingerprint {
@@ -85,6 +90,10 @@ struct os_fingerprint {
 
     bool reserved_bit_set; // Reserved bit quirk test
     bool urgent_pointer_set; // Urgent pointer quirk test
+
+    bool valid; // Indicates if the fingerprint is valid
+    bool ops_present[SEQ_PROBE_COUNT];
+    bool win_present[SEQ_PROBE_COUNT];
 };
 
 

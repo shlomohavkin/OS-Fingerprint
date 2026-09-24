@@ -11,15 +11,7 @@
 #include <arpa/inet.h> 
 
 
-#define SEQ1 0
-#define SEQ2 1
-#define SEQ3 2
-#define SEQ4 3
-#define SEQ5 4
-#define SEQ6 5
-#define ECN 6
 
-#define SRC_PORT_INIT 1000
 
 #define NUM_PROBES_SENT 7
 

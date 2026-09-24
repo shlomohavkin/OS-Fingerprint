@@ -63,44 +63,46 @@ struct seq_fingerprint {
     enum shared_sequence ss;
     struct timestamp_fingerprint ts;
 
-    bool metrics_present; // Indicates if the metrics (ISR and SP) are present
+    bool metrics_present; // Indicates if the metrics (ISR, SP and GCD) are present
 
+};
+
+struct tcp_common_fingerprint {
+    bool R_test;
+    bool DF_test;
+
+    uint8_t TG_test;
+
+    uint16_t W_test;
+    char O_test[OPS_STRING_MAX_LENGTH];
+    char Q_test[3];
 };
 
 struct tcp_fingerprint {
-    bool R_test;
-    bool DF_test;
-    // uint8_t T_test; // first need the U1 and IE tests to be implemented
-    uint8_t TG_test;
-    char Q_test[3]; // Reserved bit quirk test + Urgent pointer quirk test + null terminator
-    char S_test[3]; // Sequence number test + null terminator
-    char A_test[3]; // Acknowledgment number test + null terminator
-    char F_test[8]; // Flags test + null terminator
-    uint32_t RD_test; // RST packet data CRC32 checksum
+    struct tcp_common_fingerprint common;
+
+    char S_test[3];
+    char A_test[3];
+    char F_test[8];
+    uint32_t RD_test;
 };
 
 struct ecn_fingerprint {
-    bool R_test;
-    bool DF_test;
-    // uint8_t T_test; // first need the U1 and IE tests to be implemented
-    uint8_t TG_test; // TTL guess test
-    uint16_t W_test; // Window size test
-    char O_test[OPS_STRING_MAX_LENGTH]; // TCP options test
-    char Q_test[3]; // Reserved bit quirk test + Urgent pointer quirk test + null terminator
-    char CC_test[2]; // Congestion control test + null terminator
+    struct tcp_common_fingerprint common;
+
+    char CC_test[2];
 };
 
 struct os_fingerprint {
     struct seq_fingerprint seq;       // SEQ test 
-    char ops[SEQ_PROBE_COUNT][OPS_STRING_MAX_LENGTH];       // O1–O6
-    uint16_t win[SEQ_PROBE_COUNT];       // W1–W6
     struct ecn_fingerprint ecn;       // ECN
     struct tcp_fingerprint tcp[7];    // T1–T7
+
+    char ops[SEQ_PROBE_COUNT][OPS_STRING_MAX_LENGTH]; // O1–O6
+    uint16_t win[SEQ_PROBE_COUNT];       // W1–W6
+
     // struct u1_fingerprint u1;         // U1
     // struct ie_fingerprint ie;         // IE
-
-    bool reserved_bit_set; // Reserved bit quirk test
-    bool urgent_pointer_set; // Urgent pointer quirk test
 
     bool valid; // Indicates if the fingerprint is valid
     bool ops_present[SEQ_PROBE_COUNT];

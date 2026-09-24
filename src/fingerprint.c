@@ -406,84 +406,87 @@ char *generate_ops_string(const uint8_t *options, size_t options_len, char *ops_
     return ops_string;
 }
 
-int calculate_ops_test(struct tcp_probe_res *probes, char ops[SEQ_PROBE_COUNT][OPS_STRING_MAX_LENGTH]) {
-    if (probes == NULL || ops == NULL) {
+int calculate_ops_test(struct tcp_probe_res probe, char ops[OPS_STRING_MAX_LENGTH]) {
+    if (ops == NULL) {
         return -1;
     }
-    for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
-        ops[i][0] = '\0';
-    }
-    for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
-        if (probes[i].status != PROBE_RECEIVED) {
-            ops[i][0] = '$'; // Indicate that the probe was not received
-            ops[i][1] = '\0';
-            continue;
-        }
-        if (generate_ops_string(probes[i].parsed_response.app_protocol.tcp_ap.options,
-                                probes[i].parsed_response.app_protocol.tcp_ap.options_len, ops[i]) == NULL) {
-            return -1;
-        }
+    ops[0] = '\0'; 
+    if (generate_ops_string(probe.parsed_response.app_protocol.tcp_ap.options,
+                            probe.parsed_response.app_protocol.tcp_ap.options_len, ops) == NULL) {
+        return -1;
     }
     return 1;
 }
 
-int calculate_win_test(struct tcp_probe_res *probes, uint16_t win[SEQ_PROBE_COUNT]) {
-    if (probes == NULL || win == NULL) {
+int calculate_tcp_common_fingerprint(struct tcp_probe_res probe, struct tcp_common_fingerprint *tcp_common_fingerprint) {
+    if (tcp_common_fingerprint == NULL) {
         return -1;
     }
-    for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
-        win[i] = probes[i].status == PROBE_RECEIVED ? 
-            probes[i].parsed_response.app_protocol.tcp_ap.win_size : 0; // indicate the probes was not received with a zero value
+    *tcp_common_fingerprint = (struct tcp_common_fingerprint){0};
+
+    // R (Received) test and DF (Don't Fragment) test
+    tcp_common_fingerprint->R_test = probe.status == PROBE_RECEIVED;
+    if (!tcp_common_fingerprint->R_test) {
+        return 0; // return 0 to indicate that the R test failed
     }
+    tcp_common_fingerprint->DF_test = (probe.parsed_response.ip_fragoff & IP_DF) != 0;
+
+    // O (Options) test 
+    if (calculate_ops_test(probe, tcp_common_fingerprint->O_test) < 0) {
+        return -1; 
+    }
+
+    // W (Window Size) test
+    tcp_common_fingerprint->W_test = probe.parsed_response.app_protocol.tcp_ap.win_size;
+
+    // TG (TTL guess) test
+    uint8_t ttl = probe.parsed_response.ip_ttl;
+    if (ttl <= 32) {
+        tcp_common_fingerprint->TG_test = 32;
+    } else if (ttl <= 64) {
+        tcp_common_fingerprint->TG_test = 64;
+    } else if (ttl <= 128) {
+        tcp_common_fingerprint->TG_test = 128;
+    } else {
+        tcp_common_fingerprint->TG_test = 255;
+    }
+
+    // Q (Quirks) test
+    uint8_t flags = probe.parsed_response.app_protocol.tcp_ap.flags;
+    bool reserved_quirk = probe.parsed_response.app_protocol.tcp_ap.reserved != 0;
+    bool urgent_quirk = probe.parsed_response.app_protocol.tcp_ap.urg_pointer != 0 &&
+                        !(flags & TH_URG);
+    if (reserved_quirk && urgent_quirk) {
+        strcpy(tcp_common_fingerprint->Q_test, "RU");
+    } else if (reserved_quirk) {
+        strcpy(tcp_common_fingerprint->Q_test, "R");
+    } else if (urgent_quirk) {
+        strcpy(tcp_common_fingerprint->Q_test, "U");
+    } else {
+        strcpy(tcp_common_fingerprint->Q_test, ""); // No quirks
+    }
+
     return 1;
 }
 
-int calculate_t1_test(struct tcp_probe_res *probes, struct tcp_fingerprint *tcp_fingerprint) {
-    if (probes == NULL || tcp_fingerprint == NULL) {
+int calculate_t_tests(struct tcp_probe_res probe, struct tcp_fingerprint *tcp_fingerprint) {
+    if (tcp_fingerprint == NULL) {
         return -1;
     }
 
     *tcp_fingerprint = (struct tcp_fingerprint){0};
 
-    // R (Received) test and DF (Don't Fragment) test
-    tcp_fingerprint->R_test = probes[0].status == PROBE_RECEIVED;
-    if (!tcp_fingerprint->R_test) {
-        return 0; // return 0 to indicate that the R test failed
-    }
-    tcp_fingerprint->DF_test = (probes[0].parsed_response.ip_fragoff & IP_DF) != 0;
-
-    // TG (TTL guess) test
-    uint8_t ttl = probes[0].parsed_response.ip_ttl;
-    if (ttl <= 32) {
-        tcp_fingerprint->TG_test = 32;
-    } else if (ttl <= 64) {
-         tcp_fingerprint->TG_test = 64;
-    } else if (ttl <= 128) {
-        tcp_fingerprint->TG_test = 128;
-    } else {
-        tcp_fingerprint->TG_test = 255;
-    }
-
-    // Q (Quirks) test
-    uint8_t flags = probes[0].parsed_response.app_protocol.tcp_ap.flags;
-    bool reserved_quirk = probes[0].parsed_response.app_protocol.tcp_ap.reserved != 0;
-    bool urgent_quirk = probes[0].parsed_response.app_protocol.tcp_ap.urg_pointer != 0 &&
-                        !(flags & TH_URG);
-    if (reserved_quirk && urgent_quirk) {
-        strcpy(tcp_fingerprint->Q_test, "RU");
-    } else if (reserved_quirk) {
-        strcpy(tcp_fingerprint->Q_test, "R");
-    } else if (urgent_quirk) {
-        strcpy(tcp_fingerprint->Q_test, "U");
-    } else {
-        strcpy(tcp_fingerprint->Q_test, ""); // No quirks
+    // Common TCP fingerprint tests
+    int status = calculate_tcp_common_fingerprint(probe, &tcp_fingerprint->common);
+    if (status <= 0) {
+        return status; 
     }
 
     // S (Sequence) test and A (Acknowledgment) test
-    uint32_t received_seq = probes[0].parsed_response.app_protocol.tcp_ap.seq;
-    uint32_t received_ack = probes[0].parsed_response.app_protocol.tcp_ap.ack;
-    uint32_t sent_seq = probes[0].probe_sent.seq_num;
-    uint32_t sent_ack = probes[0].probe_sent.ack_num;
+    uint32_t received_seq = probe.parsed_response.app_protocol.tcp_ap.seq;
+    uint32_t received_ack = probe.parsed_response.app_protocol.tcp_ap.ack;
+    uint32_t sent_seq = probe.probe_sent.seq_num;
+    uint32_t sent_ack = probe.probe_sent.ack_num;
     if (received_seq == 0) {
         strcpy(tcp_fingerprint->S_test, "Z");
     } else if (received_seq == sent_ack) {
@@ -504,6 +507,7 @@ int calculate_t1_test(struct tcp_probe_res *probes, struct tcp_fingerprint *tcp_
     }
 
     // F (Flags) test
+    uint8_t flags = probe.parsed_response.app_protocol.tcp_ap.flags;
     if (flags & 0x40u) strcat(tcp_fingerprint->F_test, "E"); // ECN-Echo
     if (flags & TH_URG) strcat(tcp_fingerprint->F_test, "U");
     if (flags & TH_ACK) strcat(tcp_fingerprint->F_test, "A");
@@ -513,15 +517,46 @@ int calculate_t1_test(struct tcp_probe_res *probes, struct tcp_fingerprint *tcp_
     if (flags & TH_FIN) strcat(tcp_fingerprint->F_test, "F");
 
     // RD (RST Data) test
-    size_t payload_len = probes[0].parsed_response.app_protocol.tcp_ap.payload_len;
+    size_t payload_len = probe.parsed_response.app_protocol.tcp_ap.payload_len;
     if ((flags & TH_RST) && payload_len > 0) {
-        const uint8_t *payload = probes[0].parsed_response.app_protocol.tcp_ap.payload;
+        const uint8_t *payload = probe.parsed_response.app_protocol.tcp_ap.payload;
         if (payload == NULL || payload_len > UINT16_MAX) {
             return -1;
         }
         uLong initial = crc32(0L, Z_NULL, 0); // Initialize CRC32
         tcp_fingerprint->RD_test = (uint32_t)crc32_z(initial, payload, payload_len);
     }
+    return 1;
+}
+
+int calculate_ecn_fingerprint(struct tcp_probe_res probe, struct ecn_fingerprint *ecn_fingerprint) {
+    if (ecn_fingerprint == NULL) {
+        return -1;
+    }
+    *ecn_fingerprint = (struct ecn_fingerprint){0};
+
+    // Common TCP fingerprint tests
+    int status = calculate_tcp_common_fingerprint(probe, &ecn_fingerprint->common);
+    if (status <= 0) {
+        return status;
+    }
+
+    // CC (Congestion Control) test
+    uint8_t flags = probe.parsed_response.app_protocol.tcp_ap.flags;
+    bool ece_flag_set = (flags & 0x40u) != 0; // Check if ECE flag is set
+    bool cwr_flag_set = (flags & 0x80u) != 0; // Check if CWR flag is set
+
+    if (ece_flag_set && !cwr_flag_set) {
+        strcpy(ecn_fingerprint->CC_test, "Y"); // ECN support
+    } else if (!ece_flag_set && !cwr_flag_set) {
+        strcpy(ecn_fingerprint->CC_test, "N"); // No ECN support 
+    } else if (ece_flag_set && cwr_flag_set) {
+        strcpy(ecn_fingerprint->CC_test, "S"); // ECN support, but echoes back what it thinks is a reserved bit
+    } else {
+        strcpy(ecn_fingerprint->CC_test, "O"); // Other
+    }
+
+
     return 1;
 }
 
@@ -537,18 +572,30 @@ struct os_fingerprint calculate_os_fingerprint(struct tcp_probe_res *probes) {
 
     // Calculate tests for the SEQ probes and store the results in the fingerprint structure
     if (calculate_seq_fingerprint(seq_tcp_probes, &fingerprint.seq) < 0 ||
-        calculate_ops_test(seq_tcp_probes, fingerprint.ops) < 0 ||
-        calculate_win_test(seq_tcp_probes, fingerprint.win) < 0 ||
-        calculate_t1_test(seq_tcp_probes, &fingerprint.tcp[0]) < 0) {
+        calculate_t_tests(seq_tcp_probes[0], &fingerprint.tcp[0]) < 0) {
         return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
     }
     for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
-        fingerprint.ops_present[i] = probes[i].status == PROBE_RECEIVED;
-        fingerprint.win_present[i] = probes[i].status == PROBE_RECEIVED;
+        bool received = probes[i].status == PROBE_RECEIVED;
+
+        fingerprint.ops_present[i] = received;
+        fingerprint.win_present[i] = received;
+
+        if (!received) {
+            continue;
+        }
+
+        if (calculate_ops_test(probes[i], fingerprint.ops[i]) < 0) {
+            return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
+        }
+        fingerprint.win[i] = probes[i].parsed_response.app_protocol.tcp_ap.win_size;
     }
 
-
-    
+    // ECN tests
+    struct tcp_probe_res ecn_probe = probes[ECN];
+    if (calculate_ecn_fingerprint(ecn_probe, &fingerprint.ecn) < 0) {
+        return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
+    }
 
 
 

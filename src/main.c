@@ -12,8 +12,8 @@
 
 
 
-
-#define NUM_PROBES_SENT 7
+#define NUM_PROBES_SENT (SEQ_PROBE_COUNT + 1 + 2) // 6 sequence probes + 1 ECN probe + 2 ICMP probes
+#define ECN_INDEX SEQ_PROBE_COUNT
 
 
 char *target_IP;
@@ -81,7 +81,7 @@ int main(int argc, char **argv)
     }
 
     // ECN TCP Probe + Packet Construction
-    struct tcp_probe ecn_tcp_probe = tcp_ecn_probe_spec(SRC_PORT_INIT + 6, atoi(OPEN_PORT), target_IP);
+    struct tcp_probe ecn_tcp_probe = tcp_ecn_probe_spec(SRC_PORT_INIT + ECN_INDEX, atoi(OPEN_PORT), target_IP);
     size_t ecn_tcp_packet_len = 0;
     uint8_t *ecn_tcp_packet = construct_TCP_packet(ecn_tcp_probe, "172.25.0.230", &ecn_tcp_packet_len);
     tcp_probes_res[ECN].probe_id = ECN;
@@ -131,7 +131,25 @@ int main(int argc, char **argv)
     }
     tcp_probes_res[ECN].probe_sent = ecn_tcp_probe;
 
+
+    // ICMP Echo Probes + Packet Construction
+    struct icmp_probe *icmp_probes = ICMP_echo_probe_spec(SRC_PORT_INIT + SEQ_PROBE_COUNT + 1 + 1, atoi(OPEN_PORT), target_IP);
+    size_t icmp_packet_len1 = 0;
+    size_t icmp_packet_len2 = 0;
+    uint8_t *icmp_packet1 = construct_ICMP_packet(icmp_probes[0], "172.25.0.230", &icmp_packet_len1);
+    uint8_t *icmp_packet2 = construct_ICMP_packet(icmp_probes[1], "172.25.0.230", &icmp_packet_len2);
+    printf("Sending 2 ICMP Echo packets to: %s\n", target_IP);
+    if (send_packet(&net, icmp_packet1, icmp_packet_len1, target_IP) != 0) {
+        fprintf(stderr, "Failed to send ICMP probe 1\n");
+        return EXIT_FAILURE;
+    }
+    if (send_packet(&net, icmp_packet2, icmp_packet_len2, target_IP) != 0) {
+        fprintf(stderr, "Failed to send ICMP probe 2\n");
+        return EXIT_FAILURE;
+    }
+
     printf("\n");
+
 
     struct parsed_info parsed_res[NUM_PROBES_SENT] = {0};
     for (size_t i = 0; i < NUM_PROBES_SENT; i++) {
@@ -147,11 +165,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Fingerprint calculation failed\n");
         return EXIT_FAILURE;
     }
-    
-    // struct icmp_probe *icmp_probes = ICMPEchoProbeSpec(1000, atoi(OPEN_PORT), target_IP);
-    // size_t icmp_packet_len = 0;
-    // uint8_t *icmp_packet1 = constructICMPPacket(&icmp_probes[0], "172.25.0.230", &icmp_packet_len);
-    // uint8_t *icmp_packet2 = constructICMPPacket(&icmp_probes[1], "172.25.0.230", &icmp_packet_len);
+
 
 
     return 0;

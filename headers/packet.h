@@ -22,6 +22,7 @@ struct parsed_info {
     uint16_t ip_tot_length;
     uint8_t ip_hdr_length;
     uint16_t ip_fragoff; // flags + frag offset
+    uint8_t ip_protocol;
 
     union {
         struct tcp_u {
@@ -45,15 +46,39 @@ struct parsed_info {
             uint32_t tsecr;
 
             uint8_t *payload;
-            uint8_t payload_len;
+            size_t payload_len;
             // uint8_t payload_exp; // expected payload length by header
-        }tcp_ap;
+        } tcp_ap;
+
         struct icmp_u {
+            uint8_t type;
+            uint8_t code;
+            uint16_t checksum;
 
-        }icmp_ap;
+            union {
+                struct {
+                    uint16_t id;
+                    uint16_t seq;
+                } echo;
+
+                struct {
+                    uint32_t unused;
+                } unreachable;
+            } header;
+
+            uint8_t *payload;
+            size_t payload_len;
+        } icmp_ap;
+
         struct udp_u {
+            uint16_t src_port;
+            uint16_t dst_port;
+            uint16_t length; // UDP header + UDP payload
+            uint16_t checksum;
 
-        }udp_ap;
+            uint8_t *payload;
+            size_t payload_len;
+        } udp_ap;
     }app_protocol;
 };
 
@@ -61,9 +86,11 @@ struct parsed_info {
 
 
 uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, size_t *packet_len);
-uint8_t *construct_ICMP_packet(struct icmp_probe *icmp_probe_spec, char *source_ip, size_t *packet_len);
+uint8_t *construct_ICMP_packet(struct icmp_probe icmp_probe_spec, char *source_ip, size_t *packet_len);
 uint16_t calculate_checksum(uint8_t *data, size_t len);
 
-struct parsed_info tcp_probe_parse(const u_char *bytes, struct pcap_pkthdr *header);
+
+int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int datalink, struct parsed_info *parsed);
+void free_parsed_info(struct parsed_info *parsed);
 
 #endif /* PACKET_H */

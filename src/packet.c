@@ -1,8 +1,10 @@
 #include "packet.h"
 
-#define TCP_HEADER_SIZE 20
-#define IP_HEADER_SIZE 20
 #define ETHERNET_HEADER_SIZE 14
+#define IP_HEADER_SIZE       20
+#define TCP_HEADER_SIZE      20
+#define UDP_HEADER_SIZE       8
+#define ICMP_HEADER_SIZE      8
 
 
 uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, size_t *packet_len) {
@@ -87,8 +89,8 @@ uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, 
     return packet; // Success
 }
 
-uint8_t *construct_ICMP_packet(struct icmp_probe *icmp_probe_spec, char *source_ip, size_t *packet_len) {
-    if (icmp_probe_spec == NULL || source_ip == NULL || packet_len == NULL ) {
+uint8_t *construct_ICMP_packet(struct icmp_probe icmp_probe_spec, char *source_ip, size_t *packet_len) {
+    if (source_ip == NULL || packet_len == NULL ) {
         return NULL; // Invalid arguments
     }
 
@@ -98,31 +100,31 @@ uint8_t *construct_ICMP_packet(struct icmp_probe *icmp_probe_spec, char *source_
     struct icmphdr icmp = {0}; // ICMP header 
     struct iphdr ip = {0}; // IP header
 
-    if (icmp_probe_spec->payload_len > UINT16_MAX - (sizeof(ip) + sizeof(icmp)))
+    if (icmp_probe_spec.payload_len > UINT16_MAX - (sizeof(ip) + sizeof(icmp)))
         return NULL;
 
-    size_t total_len = sizeof(struct iphdr) + sizeof(struct icmphdr) + icmp_probe_spec->payload_len;
+    size_t total_len = sizeof(struct iphdr) + sizeof(struct icmphdr) + icmp_probe_spec.payload_len;
 
     
-    icmp.type = icmp_probe_spec->icmp_type; 
-    icmp.code = icmp_probe_spec->icmp_code;    
-    icmp.un.echo.id = htons(icmp_probe_spec->icmp_identifier);       
-    icmp.un.echo.sequence = htons(icmp_probe_spec->icmp_sequence);       
+    icmp.type = icmp_probe_spec.icmp_type; 
+    icmp.code = icmp_probe_spec.icmp_code;    
+    icmp.un.echo.id = htons(icmp_probe_spec.icmp_identifier);       
+    icmp.un.echo.sequence = htons(icmp_probe_spec.icmp_sequence);       
     icmp.checksum = 0;              // Checksum (to be calculated later)
 
     ip.version = 4;            // IPv4
     ip.ihl = 5;                // Internet Header Length (5 * 4 = 20 bytes)
-    ip.tos = icmp_probe_spec->ip_TOS;                // Type of Service
+    ip.tos = icmp_probe_spec.ip_TOS;                // Type of Service
     ip.tot_len = htons((uint16_t)total_len); // Total length
-    ip.id = htons(icmp_probe_spec->ip_id);      // Identification
-    if (icmp_probe_spec->ip_DF) {
+    ip.id = htons(icmp_probe_spec.ip_id);      // Identification
+    if (icmp_probe_spec.ip_DF) {
         ip.frag_off = htons(IP_DF); // Set the DF flag if specified
     }
     ip.ttl = 64;               // Time to Live
     ip.protocol = IPPROTO_ICMP; // Protocol (ICMP)
     ip.check = 0;              // Checksum (calculated automatically by the kernel)
     if (inet_pton(AF_INET, source_ip, &ip.saddr) != 1 ||
-        inet_pton(AF_INET, icmp_probe_spec->dest_ip, &ip.daddr) != 1) {
+        inet_pton(AF_INET, icmp_probe_spec.dest_ip, &ip.daddr) != 1) {
         perror("inet_pton failed");
         exit(1);
     }
@@ -136,9 +138,9 @@ uint8_t *construct_ICMP_packet(struct icmp_probe *icmp_probe_spec, char *source_
 
     memcpy(packet, &ip, sizeof(ip)); // IP header    
     memcpy(packet + sizeof(ip), &icmp, sizeof(icmp)); // ICMP header
-    memcpy(packet + sizeof(ip) + sizeof(icmp), icmp_probe_spec->payload, icmp_probe_spec->payload_len); // payload
+    memcpy(packet + sizeof(ip) + sizeof(icmp), icmp_probe_spec.payload, icmp_probe_spec.payload_len); // payload
 
-    uint16_t icmp_checksum = calculate_checksum((uint8_t *)(packet + sizeof(ip)), sizeof(icmp) + icmp_probe_spec->payload_len);
+    uint16_t icmp_checksum = calculate_checksum((uint8_t *)(packet + sizeof(ip)), sizeof(icmp) + icmp_probe_spec.payload_len);
     icmp.checksum = htons(icmp_checksum);
     memcpy(packet + sizeof(ip), &icmp, sizeof(icmp)); // Update the ICMP
     
@@ -175,168 +177,287 @@ uint16_t calculate_checksum(uint8_t *data, size_t len) {
     return (uint16_t)~sum; // Return one's complement
 }
 
+/* Read network-order bytes and return host-order integers. */
+static uint16_t read_u16(const uint8_t *p) {
+    return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
+}
 
-struct parsed_info tcp_probe_parse(const u_char *bytes, struct pcap_pkthdr *header) {
+static uint32_t read_u32(const uint8_t *p) {
+    return ((uint32_t)p[0] << 24) |
+           ((uint32_t)p[1] << 16) |
+           ((uint32_t)p[2] << 8)  |
+           (uint32_t)p[3];
+}
+
+static int copy_bytes(uint8_t **destination, const uint8_t *source, size_t length) {
+    *destination = NULL;
+    if (length == 0) {
+        return 1;
+    }
+
+    *destination = malloc(length);
+    if (*destination == NULL) {
+        return -1;
+    }
+
+    memcpy(*destination, source, length);
+    return 1;
+}
+
+void free_parsed_info(struct parsed_info *parsed) {
+    if (parsed == NULL) {
+        return;
+    }
+
+    switch (parsed->ip_protocol) {
+    case IPPROTO_TCP:
+        free(parsed->app_protocol.tcp_ap.options);
+        free(parsed->app_protocol.tcp_ap.payload);
+        break;
+
+    case IPPROTO_ICMP:
+        free(parsed->app_protocol.icmp_ap.payload);
+        break;
+
+    case IPPROTO_UDP:
+        free(parsed->app_protocol.udp_ap.payload);
+        break;
+    }
+
+    *parsed = (struct parsed_info){0};
+}
+
+static int parse_tcp_response(const uint8_t *tcp, size_t segment_len, struct parsed_info *out) {
+    if (segment_len < TCP_HEADER_SIZE) {
+        return 0;
+    }
+
+    size_t header_len = (size_t)(tcp[12] >> 4) * 4u;
+
+    if (header_len < TCP_HEADER_SIZE || header_len > segment_len) {
+        return 0;
+    }
+
+    out->app_protocol.tcp_ap.src_port = read_u16(tcp);
+    out->app_protocol.tcp_ap.dst_port = read_u16(tcp + 2);
+    out->app_protocol.tcp_ap.seq = read_u32(tcp + 4);
+    out->app_protocol.tcp_ap.ack = read_u32(tcp + 8);
+
+    out->app_protocol.tcp_ap.offset = tcp[12] >> 4;
+    out->app_protocol.tcp_ap.reserved = tcp[12] & 0x0Fu;
+    out->app_protocol.tcp_ap.flags = tcp[13];
+    out->app_protocol.tcp_ap.win_size = read_u16(tcp + 14);
+    out->app_protocol.tcp_ap.urg_pointer = read_u16(tcp + 18);
+
+    size_t options_len = header_len - TCP_HEADER_SIZE;
+    const uint8_t *options = tcp + TCP_HEADER_SIZE;
+
+    // Validate option boundaries and extract timestamps 
+    for (size_t i = 0; i < options_len; ) {
+        uint8_t kind = options[i];
+
+        if (kind == TCPOPT_EOL) {
+            break;
+        }
+
+        if (kind == TCPOPT_NOP) {
+            i++;
+            continue;
+        }
+        
+        // Need both the kind and length bytes 
+        if (options_len - i < 2) {
+            return 0;
+        }
+
+        size_t length = options[i + 1];
+        if (length < 2 || length > options_len - i) {
+            return 0;
+        }
+
+        if ((kind == TCPOPT_MAXSEG && length != 4) ||
+            (kind == TCPOPT_WINDOW && length != 3) ||
+            (kind == TCPOPT_SACK_PERMITTED && length != 2) ||
+            (kind == TCPOPT_TIMESTAMP && length != 10)) {
+            return 0;
+        }
+
+        if (kind == TCPOPT_TIMESTAMP &&
+            !out->app_protocol.tcp_ap.timestamp_present) {
+            out->app_protocol.tcp_ap.tsval =
+                read_u32(options + i + 2);
+
+            out->app_protocol.tcp_ap.tsecr =
+                read_u32(options + i + 6);
+
+            out->app_protocol.tcp_ap.timestamp_present = true;
+        }
+
+        // Continue validating options after the timestamp too.
+        i += length;
+    }
+
+    out->app_protocol.tcp_ap.options_len = (uint8_t)options_len;
+    if (copy_bytes(&out->app_protocol.tcp_ap.options, options, options_len) < 0) {
+        return -1;
+    }
+
+    size_t payload_len = segment_len - header_len;
+    out->app_protocol.tcp_ap.payload_len = payload_len;
+    if (copy_bytes(&out->app_protocol.tcp_ap.payload,
+                   tcp + header_len, payload_len) < 0) {
+        return -1;
+    }
+
+    return 1;
+}
+
+static int parse_icmp_response(const uint8_t *icmp, size_t message_len, struct parsed_info *out) {
+    if (message_len < ICMP_HEADER_SIZE) {
+        return 0;
+    }
+
+    out->app_protocol.icmp_ap.type = icmp[0];
+    out->app_protocol.icmp_ap.code = icmp[1];
+    out->app_protocol.icmp_ap.checksum = read_u16(icmp + 2);
+
+    if (icmp[0] == ICMP_ECHOREPLY || icmp[0] == ICMP_ECHO) {
+        out->app_protocol.icmp_ap.header.echo.id = read_u16(icmp + 4);
+        out->app_protocol.icmp_ap.header.echo.seq = read_u16(icmp + 6);
+    } else if (icmp[0] == ICMP_DEST_UNREACH) {
+        /*
+         * Save bytes 4–7 unchanged as a host-order integer.
+         * Interpret as U1's unused field only for port unreachable.
+         */
+        // Save the unused field as a 32-bit integer in host byte order
+        // This is U1's unused field
+        out->app_protocol.icmp_ap.header.unreachable.unused = read_u32(icmp + 4);
+    } else {
+        return 0; // Other ICMP message types not implemented here
+    }
+
+    size_t payload_len = message_len - ICMP_HEADER_SIZE;
+    out->app_protocol.icmp_ap.payload_len = payload_len;
+
+    if (copy_bytes(&out->app_protocol.icmp_ap.payload, icmp + ICMP_HEADER_SIZE, payload_len) < 0) {
+        return -1;
+    }
+
+    return 1;
+}
+
+// static int parse_udp_response(const uint8_t *udp, size_t available_len, struct parsed_info *out) {
+//     if (available_len < UDP_HEADER_SIZE) {
+//         return 0;
+//     }
+
+//     uint16_t udp_len = read_u16(udp + 4);
+
+//     if (udp_len < UDP_HEADER_SIZE || udp_len > available_len) {
+//         return 0;
+//     }
+
+//     out->app_protocol.udp_ap.src_port = read_u16(udp);
+//     out->app_protocol.udp_ap.dst_port = read_u16(udp + 2);
+//     out->app_protocol.udp_ap.length = udp_len;
+//     out->app_protocol.udp_ap.checksum = read_u16(udp + 6);
+
+//     size_t payload_len = (size_t)udp_len - UDP_HEADER_SIZE;
+//     out->app_protocol.udp_ap.payload_len = payload_len;
+
+//     if (copy_bytes(&out->app_protocol.udp_ap.payload,
+//                    udp + UDP_HEADER_SIZE, payload_len) < 0) {
+//         return -1;
+//     }
+
+//     return 1;
+// }
+
+int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int datalink, struct parsed_info *parsed) {
+    if (parsed == NULL) {
+        return -1;
+    }
+
+    // the caller of the function needs to free the allocated memory in the parsed_info struct
+    *parsed = (struct parsed_info){0};
+
     if (bytes == NULL || header == NULL) {
-        perror("Invalid arguments to tcp_prbe_parse");
-        return (struct parsed_info){0};
+        return -1;
     }
 
-    if (header->caplen < 14) {
-        return (struct parsed_info){0}; // unsupported ethernet header
+    if (datalink != DLT_EN10MB || header->caplen < ETHERNET_HEADER_SIZE) {
+        return 0;
     }
 
-
-    if (header->caplen < ETHERNET_HEADER_SIZE + IP_HEADER_SIZE) {
-        return (struct parsed_info){0};
+    if (read_u16(bytes + 12) != 0x0800u) {
+        return 0; // Only untagged IPv4 Ethernet frames
     }
 
-    const uint8_t *ip_hdr = bytes + ETHERNET_HEADER_SIZE;
-    size_t captured_ip_len = header->caplen - ETHERNET_HEADER_SIZE;
+    size_t ip_len = header->caplen - ETHERNET_HEADER_SIZE;
+    const uint8_t *ip = bytes + ETHERNET_HEADER_SIZE;
 
-    size_t ip_header_len = (ip_hdr[0] & 0x0Fu) * 4u;
-    size_t ip_total_len = ((uint16_t)ip_hdr[2] << 8) | ip_hdr[3];
+    if (ip_len < IP_HEADER_SIZE) {
+        return 0;
+    }
 
-    if ((ip_hdr[0] >> 4) != 4 ||
+    size_t ip_header_len = (size_t)(ip[0] & 0x0Fu) * 4u;
+    uint16_t ip_total_len = read_u16(ip + 2);
+
+    if ((ip[0] >> 4) != 4 ||
         ip_header_len < IP_HEADER_SIZE ||
-        ip_header_len > captured_ip_len ||
+        ip_header_len > ip_len ||
         ip_total_len < ip_header_len ||
-        ip_total_len > captured_ip_len ||
-        ip_hdr[9] != IPPROTO_TCP) {
-        return (struct parsed_info){0};
+        ip_total_len > ip_len) {
+        return 0;
     }
 
-    /* This parser does not reassemble fragmented IPv4 packets. */
-    uint16_t fragment = ((uint16_t)ip_hdr[6] << 8) | ip_hdr[7];
-    if (fragment & 0x3FFFu) { /* MF flag or nonzero fragment offset */
-        return (struct parsed_info){0};
+    uint16_t fragment = read_u16(ip + 6);
+
+    if (fragment & 0x3FFFu) {
+        return 0; // No fragment reassembly: MF flag or nonzero fragment offset 
     }
 
-    size_t tcp_segment_len = ip_total_len - ip_header_len;
-    if (tcp_segment_len < TCP_HEADER_SIZE) {
-        return (struct parsed_info){0};
-    }
-
-    uint16_t ether_type = ((uint16_t)bytes[12] << 8) | bytes[13];
-    if (ether_type != 0x0800) { // IPv4
-        return (struct parsed_info){0};  /* handles untagged IPv4 only. */
-    }
-
-    
-    const uint8_t *tcp_hdr = ip_hdr + ip_header_len;
-    size_t tcp_header_len = (tcp_hdr[12] >> 4) * 4u;
     struct parsed_info parsed_res = {0};
 
-    if (tcp_header_len < TCP_HEADER_SIZE ||
-        tcp_header_len > tcp_segment_len) {
-        return (struct parsed_info){0};
+    memcpy(&parsed_res.src_ip.s_addr, ip + 12, 4);
+    memcpy(&parsed_res.dst_ip.s_addr, ip + 16, 4);
+
+    parsed_res.ip_id = read_u16(ip + 4);
+    parsed_res.ip_ttl = ip[8];
+    parsed_res.ip_protocol = ip[9];
+    parsed_res.ip_tot_length = ip_total_len;
+    parsed_res.ip_hdr_length = (uint8_t)ip_header_len;
+    parsed_res.ip_fragoff = fragment;
+
+    const uint8_t *protocol_header = ip + ip_header_len;
+    size_t protocol_len = (size_t)ip_total_len - ip_header_len;
+
+    int status;
+
+    switch (parsed_res.ip_protocol) {
+    case IPPROTO_TCP:
+        status = parse_tcp_response(protocol_header, protocol_len, &parsed_res);
+        break;
+
+    case IPPROTO_ICMP:
+        status = parse_icmp_response(protocol_header, protocol_len, &parsed_res);
+        break;
+
+    case IPPROTO_UDP:
+        // status = parse_udp_response(protocol_header, protocol_len, &parsed_res);
+        break;
+
+    default:
+        return 0;
     }
 
-    // IP HEADER PARSING
-    memcpy(&parsed_res.src_ip.s_addr, ip_hdr + 12, 4);
-    memcpy(&parsed_res.dst_ip.s_addr, ip_hdr + 16, 4);
-    parsed_res.ip_id = ((uint16_t)ip_hdr[4] << 8) | ip_hdr[5];
-    parsed_res.ip_ttl = ip_hdr[8];
-    parsed_res.ip_tot_length = ((uint16_t)ip_hdr[2] << 8) | ip_hdr[3];
-    parsed_res.ip_hdr_length = ((uint8_t)ip_hdr[0] & 0b00001111) * 4u;
-    parsed_res.ip_fragoff = ((uint16_t)ip_hdr[6] << 8) | ip_hdr[7];
-
-    // TCP HEADER PARSING
-    parsed_res.app_protocol.tcp_ap.src_port = ((uint16_t)tcp_hdr[0] << 8) | tcp_hdr[1];
-    parsed_res.app_protocol.tcp_ap.dst_port = ((uint16_t)tcp_hdr[2] << 8) | tcp_hdr[3];
-    parsed_res.app_protocol.tcp_ap.seq = ((uint32_t)tcp_hdr[4] << 24) | 
-                                        ((uint32_t)tcp_hdr[5] << 16) | 
-                                        ((uint32_t)tcp_hdr[6] << 8) | 
-                                        tcp_hdr[7];
-    parsed_res.app_protocol.tcp_ap.ack = ((uint32_t)tcp_hdr[8] << 24) | 
-                                        ((uint32_t)tcp_hdr[9] << 16) | 
-                                        ((uint32_t)tcp_hdr[10] << 8) | 
-                                        tcp_hdr[11];
-    parsed_res.app_protocol.tcp_ap.win_size = ((uint16_t)tcp_hdr[14] << 8) | tcp_hdr[15];
-    parsed_res.app_protocol.tcp_ap.flags = tcp_hdr[13];
-    parsed_res.app_protocol.tcp_ap.offset = (uint8_t)tcp_hdr[12] >> 4;
-    parsed_res.app_protocol.tcp_ap.reserved = (uint8_t)tcp_hdr[12] & 0b00001111; // Extract reserved bits
-    parsed_res.app_protocol.tcp_ap.urg_pointer = ((uint16_t)tcp_hdr[18] << 8) | tcp_hdr[19];
-
-
-    if (parsed_res.app_protocol.tcp_ap.offset * 4u > TCP_HEADER_SIZE) {
-        parsed_res.app_protocol.tcp_ap.options_len = (parsed_res.app_protocol.tcp_ap.offset * 4u) - TCP_HEADER_SIZE;
-        if (parsed_res.app_protocol.tcp_ap.options_len > 40) {
-            perror("TCP options length exceeds maximum allowed size");
-            return (struct parsed_info){0}; // Return an empty struct on failure
-        }
-        parsed_res.app_protocol.tcp_ap.options = malloc(parsed_res.app_protocol.tcp_ap.options_len);
-        if (parsed_res.app_protocol.tcp_ap.options == NULL) {
-            perror("Failed to allocate memory for TCP options");
-            return (struct parsed_info){0}; // Return an empty struct on failure
-        }
-        memcpy(parsed_res.app_protocol.tcp_ap.options, tcp_hdr + TCP_HEADER_SIZE, parsed_res.app_protocol.tcp_ap.options_len);
-        parsed_res.app_protocol.tcp_ap.timestamp_present = false;
-
-        // Process TCP options
-        const uint8_t *options = parsed_res.app_protocol.tcp_ap.options;
-        size_t options_len = parsed_res.app_protocol.tcp_ap.options_len;
-
-        parsed_res.app_protocol.tcp_ap.timestamp_present = false;
-
-        for (size_t i = 0; i < options_len; ) {
-            uint8_t kind = options[i];
-            if (kind == TCPOPT_EOL) {
-                break;
-            }
-            if (kind == TCPOPT_NOP) {
-                i++;
-                continue;
-            }
-
-            /* Need both the kind and length bytes. */
-            if (options_len - i < 2) {
-                free(parsed_res.app_protocol.tcp_ap.options);
-                return (struct parsed_info){0};
-            }
-
-            size_t length = options[i + 1];
-            if (length < 2 || length > options_len - i) {
-                free(parsed_res.app_protocol.tcp_ap.options);
-                return (struct parsed_info){0};
-            }
-
-            if (kind == TCPOPT_TIMESTAMP) {
-                if (length != 10) {
-                    free(parsed_res.app_protocol.tcp_ap.options);
-                    return (struct parsed_info){0};
-                }
-                uint32_t tsval;
-                uint32_t tsecr;
-                memcpy(&tsval, options + i + 2, sizeof tsval);
-                memcpy(&tsecr, options + i + 6, sizeof tsecr);
-                parsed_res.app_protocol.tcp_ap.tsval = ntohl(tsval);
-                parsed_res.app_protocol.tcp_ap.tsecr = ntohl(tsecr);
-                parsed_res.app_protocol.tcp_ap.timestamp_present = true;
-                break;
-            }
-            i += length;
-        }
-    } else {
-        parsed_res.app_protocol.tcp_ap.options_len = 0;
-        parsed_res.app_protocol.tcp_ap.timestamp_present = false;
+    if (status != 1) {
+        free_parsed_info(&parsed_res);
+        return status;
     }
 
-
-
-    parsed_res.app_protocol.tcp_ap.payload_len = parsed_res.ip_tot_length - (parsed_res.ip_hdr_length + parsed_res.app_protocol.tcp_ap.offset * 4u);
-    if (parsed_res.app_protocol.tcp_ap.payload_len > 0) {
-        parsed_res.app_protocol.tcp_ap.payload = malloc(parsed_res.app_protocol.tcp_ap.payload_len);
-        if (parsed_res.app_protocol.tcp_ap.payload == NULL) {
-            perror("Failed to allocate memory for TCP payload");
-            return (struct parsed_info){0}; // Return an empty struct on failure
-        }
-        memcpy(parsed_res.app_protocol.tcp_ap.payload, tcp_hdr + parsed_res.app_protocol.tcp_ap.offset * 4u, parsed_res.app_protocol.tcp_ap.payload_len);
-    }
-
-    // print_test(parsed_res); // Debugging: Print the parsed information
-
-    return parsed_res;
+    *parsed = parsed_res;
+    return 1;
 }
 
 void print_test(struct parsed_info parsed_res) {
@@ -380,7 +501,7 @@ void print_test(struct parsed_info parsed_res) {
     }
 
     if (parsed_res.app_protocol.tcp_ap.payload_len > 0) {
-        printf("TCP Payload Length: %u bytes\n", parsed_res.app_protocol.tcp_ap.payload_len);
+        printf("TCP Payload Length: %zu bytes\n", parsed_res.app_protocol.tcp_ap.payload_len);
         for (size_t i = 0; i < parsed_res.app_protocol.tcp_ap.payload_len; ++i) {
             printf("%02X ", parsed_res.app_protocol.tcp_ap.payload[i]);
             if ((i + 1) % 16 == 0) {

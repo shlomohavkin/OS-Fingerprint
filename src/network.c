@@ -33,7 +33,7 @@ int network_init(struct network *net, char *interface_name, char *target_ip) {
 
     struct bpf_program filter;
     char filter_expr[128];
-    snprintf(filter_expr, sizeof(filter_expr), "src host %s and (tcp or icmp)", target_ip);
+    snprintf(filter_expr, sizeof(filter_expr), "src host %s and (tcp or icmp or udp)", target_ip);
 
     if (pcap_compile(net->pcap_handle, &filter, filter_expr, 1, PCAP_NETMASK_UNKNOWN) == -1) {
         fprintf(stderr, "pcap_compile: %s\n", pcap_geterr(net->pcap_handle));
@@ -96,8 +96,7 @@ int send_packet(struct network *net, uint8_t *packet, size_t packet_len, char *t
 
 }
 
-int receive_packet(struct network *net, struct parsed_info *parsed)
-{
+int receive_packet(struct network *net, struct parsed_info *parsed) {
     if (net == NULL || net->pcap_handle == NULL)
         return -1;
 
@@ -105,25 +104,27 @@ int receive_packet(struct network *net, struct parsed_info *parsed)
     const u_char *bytes;
 
     int status = pcap_next_ex(net->pcap_handle, &header, &bytes);
-
-    if (status == 1) {
-        printf("Captured %u bytes\n", header->caplen);
-
-        if (pcap_datalink(net->pcap_handle) != DLT_EN10MB) {
-            fprintf(stderr, "Unsupported data link type!");
-            return 0;
-        }
-
-        *parsed = tcp_probe_parse(bytes, header);
-
-        // printf("Received packet bytes: \n");
-        // for (size_t i = 0; i < header->caplen; i++) {
-        //     printf("%02X ", (unsigned int)bytes[i]);
-        // }
-        // printf("\n");
-    } else if (status == -1) {
-        fprintf(stderr, "pcap_next_ex: %s\n", pcap_geterr(net->pcap_handle));
+    if (status != 1) {
+        return status; // 0 for timeout, -1 for error, -2 for EOF
     }
 
-    return status;
+    printf("Captured %u bytes\n", header->caplen);
+
+    if (pcap_datalink(net->pcap_handle) != DLT_EN10MB) {
+        fprintf(stderr, "Unsupported data link type!");
+        return 0;
+    }
+
+    int parse_status = parse_packet(bytes, header, pcap_datalink(net->pcap_handle), parsed);
+    if (parse_status != 1) {
+        return parse_status; // 0 for unsuppoerted, malformed, fragmented or truncated packet, -1 for error
+    }
+
+    // printf("Received packet bytes: \n");
+    // for (size_t i = 0; i < header->caplen; i++) {
+    //     printf("%02X ", (unsigned int)bytes[i]);
+    // }
+    // printf("\n");
+
+    return 1;
 }

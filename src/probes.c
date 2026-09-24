@@ -182,16 +182,12 @@ struct icmp_probe *ICMP_echo_probe_spec(uint16_t source_port, uint16_t dest_port
     return icmp_probes;
 }
 
-struct tcp_probe *tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
-    struct tcp_probe *tcp_probe = malloc(sizeof(struct tcp_probe));
-    if (tcp_probe == NULL) {
-        perror("Failed to allocate memory for TCP probes");
-        exit(EXIT_FAILURE);
-    }
+struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
+    struct tcp_probe tcp_probe = {0};
 
     uint32_t base_seq_num = rand(); 
 
-    *tcp_probe = (struct tcp_probe){
+    tcp_probe = (struct tcp_probe){
         .dest_ip = dest_ip,
         .source_port = source_port,
         .dest_port = dest_port,

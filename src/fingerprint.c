@@ -30,7 +30,7 @@ static struct seq_samples find_seq_samples(const struct tcp_probe_res *probes) {
         if (probes[i].status != PROBE_RECEIVED) {
             continue;
         }
-        uint8_t flags = probes[i].response.app_protocol.tcp_ap.flags;
+        uint8_t flags = probes[i].parsed_response.app_protocol.tcp_ap.flags;
         if ((flags & (TH_SYN | TH_ACK | TH_RST)) == (TH_SYN | TH_ACK)) {
             samples.index[samples.count++] = i;
         }
@@ -49,8 +49,8 @@ static bool calculate_diffs_and_rates(const struct tcp_probe_res *probes, struct
         if (elapsed <= 0.0) {
             return false;
         }
-        samples->diffs[i] = seq_diff_calc(probes[next].response.app_protocol.tcp_ap.seq,
-                                        probes[current].response.app_protocol.tcp_ap.seq);
+        samples->diffs[i] = seq_diff_calc(probes[next].parsed_response.app_protocol.tcp_ap.seq,
+                                        probes[current].parsed_response.app_protocol.tcp_ap.seq);
         samples->rates[i] = (double)samples->diffs[i] / elapsed;
         if (!isfinite(samples->rates[i])) {
             return false;
@@ -167,7 +167,7 @@ struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct tcp_probe_res *p
     bool is_random_positive = false;
 
     for (size_t i = 0; i < samples.count; i++) {
-        if (probes[samples.index[i]].response.ip_id != 0) {
+        if (probes[samples.index[i]].parsed_response.ip_id != 0) {
             is_all_zero = false;
         }
     }
@@ -177,8 +177,8 @@ struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct tcp_probe_res *p
     }
 
     for (size_t i = 0; i + 1 < samples.count; i++) {
-        uint16_t curr_id = probes[samples.index[i]].response.ip_id;
-        uint16_t next_id = probes[samples.index[i + 1]].response.ip_id;
+        uint16_t curr_id = probes[samples.index[i]].parsed_response.ip_id;
+        uint16_t next_id = probes[samples.index[i + 1]].parsed_response.ip_id;
 
         // To match Nmap's implementation: we first check RD on the 32-bit
         // subtraction before reducing the difference to 16 bits.
@@ -210,7 +210,7 @@ struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct tcp_probe_res *p
 
     if (is_identical) {
         result.kind = IP_ID_CONSTANT;
-        result.constant_value = probes[samples.index[0]].response.ip_id;
+        result.constant_value = probes[samples.index[0]].parsed_response.ip_id;
     } else if (is_random_positive) {
         result.kind = IP_ID_RANDOM_POSITIVE;
     } else if (is_broken_incremental) {
@@ -232,9 +232,9 @@ struct timestamp_fingerprint calculate_timestamp_fingerprint(struct tcp_probe_re
     bool zero_value = false;
     for (size_t i = 0; i < samples.count; i++) {
         size_t index = samples.index[i];
-        if (!probes[index].response.app_protocol.tcp_ap.timestamp_present) {
+        if (!probes[index].parsed_response.app_protocol.tcp_ap.timestamp_present) {
             missing_option = true;
-        } else if (probes[index].response.app_protocol.tcp_ap.tsval == 0) {
+        } else if (probes[index].parsed_response.app_protocol.tcp_ap.tsval == 0) {
             zero_value = true;
         }
     }
@@ -258,8 +258,8 @@ struct timestamp_fingerprint calculate_timestamp_fingerprint(struct tcp_probe_re
         if (elapsed <= 0.0) {
             return result;
         }
-        uint32_t diff = seq_diff_calc(probes[next].response.app_protocol.tcp_ap.tsval,
-                                    probes[current].response.app_protocol.tcp_ap.tsval);
+        uint32_t diff = seq_diff_calc(probes[next].parsed_response.app_protocol.tcp_ap.tsval,
+                                    probes[current].parsed_response.app_protocol.tcp_ap.tsval);
         average_ts_inc_sec += (double)diff / elapsed;
     }
     average_ts_inc_sec /= (double)(samples.count - 1);
@@ -419,8 +419,8 @@ int calculate_ops_test(struct tcp_probe_res *probes, char ops[SEQ_PROBE_COUNT][O
             ops[i][1] = '\0';
             continue;
         }
-        if (generate_ops_string(probes[i].response.app_protocol.tcp_ap.options,
-                                probes[i].response.app_protocol.tcp_ap.options_len, ops[i]) == NULL) {
+        if (generate_ops_string(probes[i].parsed_response.app_protocol.tcp_ap.options,
+                                probes[i].parsed_response.app_protocol.tcp_ap.options_len, ops[i]) == NULL) {
             return -1;
         }
     }
@@ -433,7 +433,7 @@ int calculate_win_test(struct tcp_probe_res *probes, uint16_t win[SEQ_PROBE_COUN
     }
     for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
         win[i] = probes[i].status == PROBE_RECEIVED ? 
-            probes[i].response.app_protocol.tcp_ap.win_size : 0; // indicate the probes was not received with a zero value
+            probes[i].parsed_response.app_protocol.tcp_ap.win_size : 0; // indicate the probes was not received with a zero value
     }
     return 1;
 }
@@ -450,10 +450,10 @@ int calculate_t1_test(struct tcp_probe_res *probes, struct tcp_fingerprint *tcp_
     if (!tcp_fingerprint->R_test) {
         return 0; // return 0 to indicate that the R test failed
     }
-    tcp_fingerprint->DF_test = (probes[0].response.ip_fragoff & IP_DF) != 0;
+    tcp_fingerprint->DF_test = (probes[0].parsed_response.ip_fragoff & IP_DF) != 0;
 
     // TG (TTL guess) test
-    uint8_t ttl = probes[0].response.ip_ttl;
+    uint8_t ttl = probes[0].parsed_response.ip_ttl;
     if (ttl <= 32) {
         tcp_fingerprint->TG_test = 32;
     } else if (ttl <= 64) {
@@ -465,9 +465,9 @@ int calculate_t1_test(struct tcp_probe_res *probes, struct tcp_fingerprint *tcp_
     }
 
     // Q (Quirks) test
-    uint8_t flags = probes[0].response.app_protocol.tcp_ap.flags;
-    bool reserved_quirk = probes[0].response.app_protocol.tcp_ap.reserved != 0;
-    bool urgent_quirk = probes[0].response.app_protocol.tcp_ap.urg_pointer != 0 &&
+    uint8_t flags = probes[0].parsed_response.app_protocol.tcp_ap.flags;
+    bool reserved_quirk = probes[0].parsed_response.app_protocol.tcp_ap.reserved != 0;
+    bool urgent_quirk = probes[0].parsed_response.app_protocol.tcp_ap.urg_pointer != 0 &&
                         !(flags & TH_URG);
     if (reserved_quirk && urgent_quirk) {
         strcpy(tcp_fingerprint->Q_test, "RU");
@@ -480,8 +480,8 @@ int calculate_t1_test(struct tcp_probe_res *probes, struct tcp_fingerprint *tcp_
     }
 
     // S (Sequence) test and A (Acknowledgment) test
-    uint32_t received_seq = probes[0].response.app_protocol.tcp_ap.seq;
-    uint32_t received_ack = probes[0].response.app_protocol.tcp_ap.ack;
+    uint32_t received_seq = probes[0].parsed_response.app_protocol.tcp_ap.seq;
+    uint32_t received_ack = probes[0].parsed_response.app_protocol.tcp_ap.ack;
     uint32_t sent_seq = probes[0].probe_sent.seq_num;
     uint32_t sent_ack = probes[0].probe_sent.ack_num;
     if (received_seq == 0) {
@@ -513,9 +513,9 @@ int calculate_t1_test(struct tcp_probe_res *probes, struct tcp_fingerprint *tcp_
     if (flags & TH_FIN) strcat(tcp_fingerprint->F_test, "F");
 
     // RD (RST Data) test
-    size_t payload_len = probes[0].response.app_protocol.tcp_ap.payload_len;
+    size_t payload_len = probes[0].parsed_response.app_protocol.tcp_ap.payload_len;
     if ((flags & TH_RST) && payload_len > 0) {
-        const uint8_t *payload = probes[0].response.app_protocol.tcp_ap.payload;
+        const uint8_t *payload = probes[0].parsed_response.app_protocol.tcp_ap.payload;
         if (payload == NULL || payload_len > UINT16_MAX) {
             return -1;
         }
@@ -525,22 +525,33 @@ int calculate_t1_test(struct tcp_probe_res *probes, struct tcp_fingerprint *tcp_
     return 1;
 }
 
-struct os_fingerprint calculate_os_fingerprint(struct tcp_probe_res *probes)
-{
+struct os_fingerprint calculate_os_fingerprint(struct tcp_probe_res *probes) {
     struct os_fingerprint fingerprint = {0};
     if (probes == NULL) {
         return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
     }
-    if (calculate_seq_fingerprint(probes, &fingerprint.seq) < 0 ||
-        calculate_ops_test(probes, fingerprint.ops) < 0 ||
-        calculate_win_test(probes, fingerprint.win) < 0 ||
-        calculate_t1_test(probes, &fingerprint.tcp[0]) < 0) {
+    struct tcp_probe_res seq_tcp_probes[SEQ_PROBE_COUNT] = {0};
+    for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
+        seq_tcp_probes[i] = probes[i];
+    }
+
+    // Calculate tests for the SEQ probes and store the results in the fingerprint structure
+    if (calculate_seq_fingerprint(seq_tcp_probes, &fingerprint.seq) < 0 ||
+        calculate_ops_test(seq_tcp_probes, fingerprint.ops) < 0 ||
+        calculate_win_test(seq_tcp_probes, fingerprint.win) < 0 ||
+        calculate_t1_test(seq_tcp_probes, &fingerprint.tcp[0]) < 0) {
         return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
     }
     for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
         fingerprint.ops_present[i] = probes[i].status == PROBE_RECEIVED;
         fingerprint.win_present[i] = probes[i].status == PROBE_RECEIVED;
     }
+
+
+    
+
+
+
     fingerprint.valid = true;
     return fingerprint;
 }

@@ -79,11 +79,22 @@ struct tcp_fingerprint {
     uint32_t RD_test; // RST packet data CRC32 checksum
 };
 
+struct ecn_fingerprint {
+    bool R_test;
+    bool DF_test;
+    // uint8_t T_test; // first need the U1 and IE tests to be implemented
+    uint8_t TG_test; // TTL guess test
+    uint16_t W_test; // Window size test
+    char O_test[OPS_STRING_MAX_LENGTH]; // TCP options test
+    char Q_test[3]; // Reserved bit quirk test + Urgent pointer quirk test + null terminator
+    char CC_test[2]; // Congestion control test + null terminator
+};
+
 struct os_fingerprint {
     struct seq_fingerprint seq;       // SEQ test 
     char ops[SEQ_PROBE_COUNT][OPS_STRING_MAX_LENGTH];       // O1–O6
     uint16_t win[SEQ_PROBE_COUNT];       // W1–W6
-    // struct ecn_fingerprint ecn;       // ECN
+    struct ecn_fingerprint ecn;       // ECN
     struct tcp_fingerprint tcp[7];    // T1–T7
     // struct u1_fingerprint u1;         // U1
     // struct ie_fingerprint ie;         // IE
@@ -96,6 +107,8 @@ struct os_fingerprint {
     bool win_present[SEQ_PROBE_COUNT];
 };
 
+
+struct os_fingerprint calculate_os_fingerprint(struct tcp_probe_res *probes);
 
 
 

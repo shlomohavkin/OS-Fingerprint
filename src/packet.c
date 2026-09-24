@@ -5,35 +5,39 @@
 #define ETHERNET_HEADER_SIZE 14
 
 
-uint8_t *construct_TCP_packet(struct tcp_probe *tcp_probe_spec, char *source_ip, size_t *packet_len) {
-    if (tcp_probe_spec == NULL || source_ip == NULL || packet_len == NULL) {
+uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, size_t *packet_len) {
+    if (packet_len == NULL) {
+        return NULL;
+    }
+    *packet_len = 0;
+
+    if (source_ip == NULL) {
         perror("Invalid arguments to constructTCPPacket");
         return NULL; 
     }
 
-    if (tcp_probe_spec->tcp_options_len > 40 || tcp_probe_spec->tcp_options_len % 4 != 0) {
+    if (tcp_probe_spec.tcp_options_len > 40 || tcp_probe_spec.tcp_options_len % 4 != 0) {
         perror("TCP options length exceeds maximum allowed size or is not a multiple of 4");
         return NULL; 
-    }
+    } 
 
-    if (packet_len != 0)
-        *packet_len = 0;
-
-    size_t tcp_len = sizeof(struct tcphdr) + tcp_probe_spec->tcp_options_len;
+    size_t tcp_len = sizeof(struct tcphdr) + tcp_probe_spec.tcp_options_len;
     size_t total_len = sizeof(struct iphdr) + tcp_len;
 
     struct tcphdr tcp = {0}; // tcp header 
     struct iphdr ip = {0}; // ip header
 
     
-    tcp.source = htons(tcp_probe_spec->source_port); 
-    tcp.dest = htons(tcp_probe_spec->dest_port);    
-    tcp.seq = htonl(tcp_probe_spec->seq_num);       
-    tcp.ack_seq = htonl(tcp_probe_spec->ack_num);       
+    tcp.source = htons(tcp_probe_spec.source_port); 
+    tcp.dest = htons(tcp_probe_spec.dest_port);    
+    tcp.seq = htonl(tcp_probe_spec.seq_num);       
+    tcp.ack_seq = htonl(tcp_probe_spec.ack_num);       
     tcp.doff = tcp_len / 4; // Data offset 
-    tcp.th_flags = tcp_probe_spec->tcp_flags; // TCP flags
-    tcp.window = htons(tcp_probe_spec->window_size); // Window size
+    tcp.th_flags = tcp_probe_spec.tcp_flags; // TCP flags
+    tcp.window = htons(tcp_probe_spec.window_size); // Window size
     tcp.check = 0;              // Checksum (to be calculated later)
+    tcp.urg_ptr = htons(tcp_probe_spec.urgent_pointer); // Urgent pointer
+    tcp.res1 = tcp_probe_spec.reseved_bit ? 0x08u : 0; // Reserved bit
 
     ip.version = 4;            // IPv4
     ip.ihl = 5;                // Internet Header Length (5 * 4 = 20 bytes)
@@ -45,7 +49,7 @@ uint8_t *construct_TCP_packet(struct tcp_probe *tcp_probe_spec, char *source_ip,
     ip.protocol = IPPROTO_TCP; // Protocol (TCP)
     ip.check = 0;              // Checksum (calculated automatically by the kernel)
     if (inet_pton(AF_INET, source_ip, &ip.saddr) != 1 ||
-        inet_pton(AF_INET, tcp_probe_spec->dest_ip, &ip.daddr) != 1) {
+        inet_pton(AF_INET, tcp_probe_spec.dest_ip, &ip.daddr) != 1) {
         perror("inet_pton failed");
         exit(1);
     }
@@ -58,7 +62,8 @@ uint8_t *construct_TCP_packet(struct tcp_probe *tcp_probe_spec, char *source_ip,
 
     memcpy(packet, &ip, sizeof(ip)); // ip header
     memcpy(packet + sizeof(ip), &tcp, sizeof(tcp)); // tcp header
-    memcpy(packet + sizeof(ip) + sizeof(tcp), tcp_probe_spec->tcp_options, tcp_probe_spec->tcp_options_len); // tcp options
+    memcpy(packet + sizeof(ip) + sizeof(tcp), tcp_probe_spec.tcp_options, tcp_probe_spec.tcp_options_len); // tcp options
+       
 
 
     // CALCULATE TCP CHECKSUM
@@ -181,15 +186,51 @@ struct parsed_info tcp_probe_parse(const u_char *bytes, struct pcap_pkthdr *head
         return (struct parsed_info){0}; // unsupported ethernet header
     }
 
-    uint16_t ether_type = ((uint16_t)bytes[12] << 8) | bytes[13];
 
+    if (header->caplen < ETHERNET_HEADER_SIZE + IP_HEADER_SIZE) {
+        return (struct parsed_info){0};
+    }
+
+    const uint8_t *ip_hdr = bytes + ETHERNET_HEADER_SIZE;
+    size_t captured_ip_len = header->caplen - ETHERNET_HEADER_SIZE;
+
+    size_t ip_header_len = (ip_hdr[0] & 0x0Fu) * 4u;
+    size_t ip_total_len = ((uint16_t)ip_hdr[2] << 8) | ip_hdr[3];
+
+    if ((ip_hdr[0] >> 4) != 4 ||
+        ip_header_len < IP_HEADER_SIZE ||
+        ip_header_len > captured_ip_len ||
+        ip_total_len < ip_header_len ||
+        ip_total_len > captured_ip_len ||
+        ip_hdr[9] != IPPROTO_TCP) {
+        return (struct parsed_info){0};
+    }
+
+    /* This parser does not reassemble fragmented IPv4 packets. */
+    uint16_t fragment = ((uint16_t)ip_hdr[6] << 8) | ip_hdr[7];
+    if (fragment & 0x3FFFu) { /* MF flag or nonzero fragment offset */
+        return (struct parsed_info){0};
+    }
+
+    size_t tcp_segment_len = ip_total_len - ip_header_len;
+    if (tcp_segment_len < TCP_HEADER_SIZE) {
+        return (struct parsed_info){0};
+    }
+
+    uint16_t ether_type = ((uint16_t)bytes[12] << 8) | bytes[13];
     if (ether_type != 0x0800) { // IPv4
         return (struct parsed_info){0};  /* handles untagged IPv4 only. */
     }
 
-    uint8_t *ip_hdr = bytes + 14;
-    uint8_t *tcp_hdr = ip_hdr + IP_HEADER_SIZE;
+    
+    const uint8_t *tcp_hdr = ip_hdr + ip_header_len;
+    size_t tcp_header_len = (tcp_hdr[12] >> 4) * 4u;
     struct parsed_info parsed_res = {0};
+
+    if (tcp_header_len < TCP_HEADER_SIZE ||
+        tcp_header_len > tcp_segment_len) {
+        return (struct parsed_info){0};
+    }
 
     // IP HEADER PARSING
     memcpy(&parsed_res.src_ip.s_addr, ip_hdr + 12, 4);
@@ -232,13 +273,49 @@ struct parsed_info tcp_probe_parse(const u_char *bytes, struct pcap_pkthdr *head
         memcpy(parsed_res.app_protocol.tcp_ap.options, tcp_hdr + TCP_HEADER_SIZE, parsed_res.app_protocol.tcp_ap.options_len);
         parsed_res.app_protocol.tcp_ap.timestamp_present = false;
 
-        for (size_t i = 0; i < parsed_res.app_protocol.tcp_ap.options_len; ++i) {
-            if (tcp_hdr[TCP_HEADER_SIZE + i] == TCPOPT_TIMESTAMP && i + 9 < parsed_res.app_protocol.tcp_ap.options_len) { // Timestamp option
-                parsed_res.app_protocol.tcp_ap.timestamp_present = true;
-                memcpy(&parsed_res.app_protocol.tcp_ap.tsval, tcp_hdr + TCP_HEADER_SIZE + i + 2, 4);
-                memcpy(&parsed_res.app_protocol.tcp_ap.tsecr, tcp_hdr + TCP_HEADER_SIZE + i + 6, 4);
+        // Process TCP options
+        const uint8_t *options = parsed_res.app_protocol.tcp_ap.options;
+        size_t options_len = parsed_res.app_protocol.tcp_ap.options_len;
+
+        parsed_res.app_protocol.tcp_ap.timestamp_present = false;
+
+        for (size_t i = 0; i < options_len; ) {
+            uint8_t kind = options[i];
+            if (kind == TCPOPT_EOL) {
                 break;
             }
+            if (kind == TCPOPT_NOP) {
+                i++;
+                continue;
+            }
+
+            /* Need both the kind and length bytes. */
+            if (options_len - i < 2) {
+                free(parsed_res.app_protocol.tcp_ap.options);
+                return (struct parsed_info){0};
+            }
+
+            size_t length = options[i + 1];
+            if (length < 2 || length > options_len - i) {
+                free(parsed_res.app_protocol.tcp_ap.options);
+                return (struct parsed_info){0};
+            }
+
+            if (kind == TCPOPT_TIMESTAMP) {
+                if (length != 10) {
+                    free(parsed_res.app_protocol.tcp_ap.options);
+                    return (struct parsed_info){0};
+                }
+                uint32_t tsval;
+                uint32_t tsecr;
+                memcpy(&tsval, options + i + 2, sizeof tsval);
+                memcpy(&tsecr, options + i + 6, sizeof tsecr);
+                parsed_res.app_protocol.tcp_ap.tsval = ntohl(tsval);
+                parsed_res.app_protocol.tcp_ap.tsecr = ntohl(tsecr);
+                parsed_res.app_protocol.tcp_ap.timestamp_present = true;
+                break;
+            }
+            i += length;
         }
     } else {
         parsed_res.app_protocol.tcp_ap.options_len = 0;
@@ -286,7 +363,7 @@ void print_test(struct parsed_info parsed_res) {
         printf("TCP Options Length: %u bytes\n", parsed_res.app_protocol.tcp_ap.options_len);
         if (parsed_res.app_protocol.tcp_ap.timestamp_present) {
             printf("Timestamp Option Present:\n");
-            printf("TSval: %u, TSecr: %u\n", ntohl(parsed_res.app_protocol.tcp_ap.tsval), ntohl(parsed_res.app_protocol.tcp_ap.tsecr));
+            printf("TSval: %u, TSecr: %u\n", parsed_res.app_protocol.tcp_ap.tsval, parsed_res.app_protocol.tcp_ap.tsecr);
         } else {
             printf("Timestamp Option Not Present.\n");
         }

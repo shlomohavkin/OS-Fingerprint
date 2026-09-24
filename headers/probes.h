@@ -45,5 +45,6 @@ struct icmp_probe {
 
 struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
 struct icmp_probe *ICMP_echo_probeSpec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
+struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
 
 #endif /* PROBES_H */

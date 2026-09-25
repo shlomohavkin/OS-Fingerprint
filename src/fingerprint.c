@@ -20,7 +20,7 @@ static double elapsed_seconds(struct timespec previous, struct timespec next) {
            ((double)next.tv_nsec - (double)previous.tv_nsec) / 1e9;
 }
 
-static struct seq_samples find_seq_samples(const struct tcp_probe_res *probes) {
+static struct seq_samples find_seq_samples(const struct probe_result *probes) {
     struct seq_samples samples = {0};
     if (probes == NULL) {
         return samples;
@@ -38,7 +38,7 @@ static struct seq_samples find_seq_samples(const struct tcp_probe_res *probes) {
     return samples;
 }
 
-static bool calculate_diffs_and_rates(const struct tcp_probe_res *probes, struct seq_samples *samples) {
+static bool calculate_diffs_and_rates(const struct probe_result *probes, struct seq_samples *samples) {
     if (samples->count < 2) {
         return false;
     }
@@ -103,7 +103,7 @@ double standard_deviation(const double *arr, size_t len) {
 
 
 /* TEST CALCULATION FUNCTIONS */
-uint32_t calculate_gcd_test(struct tcp_probe_res *probes) {
+uint32_t calculate_gcd_test(struct probe_result *probes) {
     struct seq_samples samples = find_seq_samples(probes);
     if (samples.count < 4 || !calculate_diffs_and_rates(probes, &samples)) {
         return UNAVAILABLE_SIG;
@@ -111,7 +111,7 @@ uint32_t calculate_gcd_test(struct tcp_probe_res *probes) {
     return gcd_array(samples.diffs, samples.count - 1);
 }
 
-uint32_t calculate_isr_test(struct tcp_probe_res *probes) {
+uint32_t calculate_isr_test(struct probe_result *probes) {
     struct seq_samples samples = find_seq_samples(probes);
     if (samples.count < 4 || !calculate_diffs_and_rates(probes, &samples)) {
         return UNAVAILABLE_SIG;
@@ -129,7 +129,7 @@ uint32_t calculate_isr_test(struct tcp_probe_res *probes) {
     return rate <= 1.0 ? 0 : (uint32_t)round(8.0 * log2(rate));
 }
 
-uint32_t calculate_sp_test(struct tcp_probe_res *probes, uint32_t gcd_value) {
+uint32_t calculate_sp_test(struct probe_result *probes, uint32_t gcd_value) {
     struct seq_samples samples = find_seq_samples(probes);
     if (samples.count < 4 || !calculate_diffs_and_rates(probes, &samples) ||
         gcd_value == UNAVAILABLE_SIG) {
@@ -152,7 +152,7 @@ uint32_t calculate_sp_test(struct tcp_probe_res *probes, uint32_t gcd_value) {
 }
 
 
-struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct tcp_probe_res *probes) {
+struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct probe_result *probes) {
     struct ip_id_fingerprint result = {.kind = IP_ID_UNAVAILABLE};
     struct seq_samples samples = find_seq_samples(probes);
     if (samples.count < 3) {
@@ -221,7 +221,7 @@ struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct tcp_probe_res *p
     return result;
 }
 
-struct timestamp_fingerprint calculate_timestamp_fingerprint(struct tcp_probe_res *probes) {
+struct timestamp_fingerprint calculate_timestamp_fingerprint(struct probe_result *probes) {
     struct timestamp_fingerprint result = {.kind = TIMESTAMP_UNAVAILABLE};
     struct seq_samples samples = find_seq_samples(probes);
     if (samples.count == 0) {
@@ -280,7 +280,7 @@ struct timestamp_fingerprint calculate_timestamp_fingerprint(struct tcp_probe_re
     return result;
 }
 
-int calculate_seq_fingerprint(struct tcp_probe_res *probes, struct seq_fingerprint *fingerprint) {
+int calculate_seq_fingerprint(struct probe_result *probes, struct seq_fingerprint *fingerprint) {
     if (probes == NULL || fingerprint == NULL) {
         return -1;
     }
@@ -406,7 +406,7 @@ char *generate_ops_string(const uint8_t *options, size_t options_len, char *ops_
     return ops_string;
 }
 
-int calculate_ops_test(struct tcp_probe_res probe, char ops[OPS_STRING_MAX_LENGTH]) {
+int calculate_ops_test(struct probe_result probe, char ops[OPS_STRING_MAX_LENGTH]) {
     if (ops == NULL) {
         return -1;
     }
@@ -418,7 +418,7 @@ int calculate_ops_test(struct tcp_probe_res probe, char ops[OPS_STRING_MAX_LENGT
     return 1;
 }
 
-int calculate_tcp_common_fingerprint(struct tcp_probe_res probe, struct tcp_common_fingerprint *tcp_common_fingerprint) {
+int calculate_tcp_common_fingerprint(struct probe_result probe, struct tcp_common_fingerprint *tcp_common_fingerprint) {
     if (tcp_common_fingerprint == NULL) {
         return -1;
     }
@@ -469,7 +469,7 @@ int calculate_tcp_common_fingerprint(struct tcp_probe_res probe, struct tcp_comm
     return 1;
 }
 
-int calculate_t_tests(struct tcp_probe_res probe, struct tcp_fingerprint *tcp_fingerprint) {
+int calculate_t_tests(struct probe_result probe, struct tcp_fingerprint *tcp_fingerprint) {
     if (tcp_fingerprint == NULL) {
         return -1;
     }
@@ -485,8 +485,8 @@ int calculate_t_tests(struct tcp_probe_res probe, struct tcp_fingerprint *tcp_fi
     // S (Sequence) test and A (Acknowledgment) test
     uint32_t received_seq = probe.parsed_response.app_protocol.tcp_ap.seq;
     uint32_t received_ack = probe.parsed_response.app_protocol.tcp_ap.ack;
-    uint32_t sent_seq = probe.probe_sent.seq_num;
-    uint32_t sent_ack = probe.probe_sent.ack_num;
+    uint32_t sent_seq = probe.probe_sent.tcp.seq_num;
+    uint32_t sent_ack = probe.probe_sent.tcp.ack_num;
     if (received_seq == 0) {
         strcpy(tcp_fingerprint->S_test, "Z");
     } else if (received_seq == sent_ack) {
@@ -529,7 +529,7 @@ int calculate_t_tests(struct tcp_probe_res probe, struct tcp_fingerprint *tcp_fi
     return 1;
 }
 
-int calculate_ecn_fingerprint(struct tcp_probe_res probe, struct ecn_fingerprint *ecn_fingerprint) {
+int calculate_ecn_fingerprint(struct probe_result probe, struct ecn_fingerprint *ecn_fingerprint) {
     if (ecn_fingerprint == NULL) {
         return -1;
     }
@@ -560,12 +560,71 @@ int calculate_ecn_fingerprint(struct tcp_probe_res probe, struct ecn_fingerprint
     return 1;
 }
 
-struct os_fingerprint calculate_os_fingerprint(struct tcp_probe_res *probes) {
+int calculate_ie_fingerprint(struct probe_result probes[2], struct ie_fingerprint *ie_fingerprint) {
+    if (ie_fingerprint == NULL) {
+        return -1;
+    }
+    *ie_fingerprint = (struct ie_fingerprint){0};
+
+    
+    
+    for (size_t i = 0; i < NUM_ICMP_PROBES; i++) {
+        // R (Received) test
+        ie_fingerprint->R_test[i] = probes[i].status == PROBE_RECEIVED;
+        if (!ie_fingerprint->R_test[i]) {
+            return 0; // return 0 to indicate that the R test failed
+        }
+
+        // TG (TTL guess) test
+        uint8_t ttl = probes[i].parsed_response.ip_ttl;
+        if (ttl <= 32) {
+            ie_fingerprint->TG_test[i] = 32;
+        } else if (ttl <= 64) {
+            ie_fingerprint->TG_test[i] = 64;
+        } else if (ttl <= 128) {
+            ie_fingerprint->TG_test[i] = 128;
+        } else {
+            ie_fingerprint->TG_test[i] = 255;
+        }
+    }
+
+    // DFI (Don't Fragment) IE test
+    bool response_df_flag_set1 = (probes[0].parsed_response.ip_fragoff & IP_DF) != 0;
+    bool response_df_flag_set2 = (probes[1].parsed_response.ip_fragoff & IP_DF) != 0;
+    if (!response_df_flag_set1 && !response_df_flag_set2) {
+        strcpy(ie_fingerprint->DFI_test, "N"); // Both responses have DF bits down
+    } else if (response_df_flag_set1 && response_df_flag_set2) {
+        strcpy(ie_fingerprint->DFI_test, "Y"); // Both probes have DF bits up
+    } else if (response_df_flag_set1 && !response_df_flag_set2) {
+        strcpy(ie_fingerprint->DFI_test, "S"); // Both responses echo the DF bit
+    } else {
+        strcpy(ie_fingerprint->DFI_test, "O"); // Other
+    }
+
+    // T (TTL) test 
+    
+    // CD (Code) test
+    uint8_t icmp_code1 = probes[0].parsed_response.app_protocol.icmp_ap.code;
+    uint8_t icmp_code2 = probes[1].parsed_response.app_protocol.icmp_ap.code;
+    if (icmp_code1 == 0 && icmp_code2 == 0) {
+        strcpy(ie_fingerprint->CD_test, "Z"); // Both responses have code
+    } else if (icmp_code1 == 9 && icmp_code2 == 0) {
+        strcpy(ie_fingerprint->CD_test, "S"); // First probe has code 9, second probe has code 0
+    } else if (icmp_code1 == icmp_code2) {
+        snprintf(ie_fingerprint->CD_test, sizeof(ie_fingerprint->CD_test), "%X", (unsigned int)icmp_code1); // Both responses have the same code
+    } else {
+        strcpy(ie_fingerprint->CD_test, "O"); // Other
+    }
+
+    return 1;
+}
+
+struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     struct os_fingerprint fingerprint = {0};
     if (probes == NULL) {
         return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
     }
-    struct tcp_probe_res seq_tcp_probes[SEQ_PROBE_COUNT] = {0};
+    struct probe_result seq_tcp_probes[SEQ_PROBE_COUNT] = {0};
     for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
         seq_tcp_probes[i] = probes[i];
     }
@@ -592,10 +651,20 @@ struct os_fingerprint calculate_os_fingerprint(struct tcp_probe_res *probes) {
     }
 
     // ECN tests
-    struct tcp_probe_res ecn_probe = probes[ECN];
+    struct probe_result ecn_probe = probes[ECN];
     if (calculate_ecn_fingerprint(ecn_probe, &fingerprint.ecn) < 0) {
         return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
     }
+
+    // IE tests
+    struct probe_result ie_probes[2];
+    ie_probes[0] = probes[IE1];
+    ie_probes[1] = probes[IE2];
+    if (calculate_ie_fingerprint(ie_probes, &fingerprint.ie) < 0) {
+        return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
+    }
+
+
 
 
 

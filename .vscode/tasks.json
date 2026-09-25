@@ -6,10 +6,16 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "rm -f \"${workspaceFolder}/os-fingerprint\" && sudo /usr/bin/gcc -I\"${workspaceFolder}/headers\" -fdiagnostics-color=always -g \"${workspaceFolder}\"/src/*.c -o \"${workspaceFolder}/os-fingerprint\" -lpcap -lm -lz"
+                "sudo -v && rm -f \"${workspaceFolder}/os-fingerprint\" && sudo /usr/bin/gcc -I\"${workspaceFolder}/headers\" -fdiagnostics-color=always -g \"${workspaceFolder}\"/src/*.c -o \"${workspaceFolder}/os-fingerprint\" -lpcap -lm -lz && sudo /usr/sbin/setcap cap_net_raw,cap_net_admin+ep \"${workspaceFolder}/os-fingerprint\""
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
+            },
+            "presentation": {
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "close": true
             },
             "problemMatcher": [
                 "$gcc"
@@ -26,7 +32,7 @@
             "command": "bash",
             "args": [
                 "-lc",
-                "sudo gcc -I\"${workspaceFolder}/headers\" -g \"${workspaceFolder}\"/src/*.c -o \"${workspaceFolder}/os-fingerprint\" -lpcap -lm -lz && \"${workspaceFolder}/os-fingerprint\" 1.1.1.1 44,8888"
+                "sudo gcc -I\"${workspaceFolder}/headers\" -g \"${workspaceFolder}\"/src/*.c -o \"${workspaceFolder}/os-fingerprint\" -lpcap -lm -lz && sudo /usr/sbin/setcap cap_net_raw,cap_net_admin+ep \"${workspaceFolder}/os-fingerprint\" && \"${workspaceFolder}/os-fingerprint\" 1.1.1.1 44,8888"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"

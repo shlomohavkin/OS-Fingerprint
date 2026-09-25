@@ -432,7 +432,7 @@ int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int data
     const uint8_t *protocol_header = ip + ip_header_len;
     size_t protocol_len = (size_t)ip_total_len - ip_header_len;
 
-    int status;
+    int status = -1;
 
     switch (parsed_res.ip_protocol) {
     case IPPROTO_TCP:

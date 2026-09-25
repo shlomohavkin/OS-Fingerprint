@@ -93,6 +93,18 @@ struct ecn_fingerprint {
     char CC_test[2];
 };
 
+struct ie_fingerprint {
+    bool R_test[2];
+    uint8_t TG_test[2];
+
+    char DFI_test[2];
+
+
+    // Only for the first probe
+    // uint8_t T_test; // need U1 test
+    char CD_test[3];
+};
+
 struct os_fingerprint {
     struct seq_fingerprint seq;       // SEQ test 
     struct ecn_fingerprint ecn;       // ECN
@@ -102,7 +114,7 @@ struct os_fingerprint {
     uint16_t win[SEQ_PROBE_COUNT];       // W1–W6
 
     // struct u1_fingerprint u1;         // U1
-    // struct ie_fingerprint ie;         // IE
+    struct ie_fingerprint ie;         // IE
 
     bool valid; // Indicates if the fingerprint is valid
     bool ops_present[SEQ_PROBE_COUNT];
@@ -110,7 +122,7 @@ struct os_fingerprint {
 };
 
 
-struct os_fingerprint calculate_os_fingerprint(struct tcp_probe_res *probes);
+struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes);
 
 
 

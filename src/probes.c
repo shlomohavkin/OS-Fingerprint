@@ -21,6 +21,7 @@ struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t de
         .window_size = 1,
         .urgent_pointer = 0,
         .reseved_bit = false,
+        .ip_DF = false,
         .tcp_options = {
             TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
             TCPOPT_NOP, // NOP
@@ -42,6 +43,7 @@ struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t de
         .window_size = 63,
         .urgent_pointer = 0,
         .reseved_bit = false,
+        .ip_DF = false,
         .tcp_options = {
             TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x05, 0x78, // MSS = 1400
             TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x00, // winow scale = 0
@@ -63,6 +65,7 @@ struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t de
         .window_size = 4,
         .urgent_pointer = 0,
         .reseved_bit = false,
+        .ip_DF = false,
         .tcp_options = {
             TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
             0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
@@ -85,6 +88,7 @@ struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t de
         .window_size = 4,
         .urgent_pointer = 0,
         .reseved_bit = false,
+        .ip_DF = false,
         .tcp_options = {
             TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
             TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
@@ -105,6 +109,7 @@ struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t de
         .window_size = 16,
         .urgent_pointer = 0,
         .reseved_bit = false,
+        .ip_DF = false,
         .tcp_options = {
             TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x02, 0x18, // MSS = 536
             TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
@@ -126,6 +131,7 @@ struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t de
         .window_size = 512,
         .urgent_pointer = 0,
         .reseved_bit = false,
+        .ip_DF = false,
         .tcp_options = {
             TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x01, 0x09, // MSS = 265
             TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
@@ -140,14 +146,12 @@ struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t de
     return tcp_probes;
 }
 
-struct icmp_probe *ICMP_echo_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
+struct icmp_probe *ICMP_echo_probe_spec(char *dest_ip) {
     struct icmp_probe *icmp_probes = malloc(2 * sizeof(struct icmp_probe));
     srand((unsigned)time(NULL));
 
     icmp_probes[0] = (struct icmp_probe){
         .dest_ip = dest_ip,
-        .source_port = source_port,
-        .dest_port = dest_port,
         .icmp_type = 8, // Echo Request
         .icmp_code = 9,
         .icmp_identifier = rand(),
@@ -161,8 +165,6 @@ struct icmp_probe *ICMP_echo_probe_spec(uint16_t source_port, uint16_t dest_port
 
     icmp_probes[1] = (struct icmp_probe){
         .dest_ip = dest_ip,
-        .source_port = source_port + 1,
-        .dest_port = dest_port,
         .icmp_type = 8, // Echo Request
         .icmp_code = 0,
         .icmp_identifier = icmp_probes[0].icmp_identifier + 1,
@@ -209,4 +211,152 @@ struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, ch
     };
 
     return tcp_probe;
+}
+
+
+
+struct tcp_probe *tcp_t_probes_spec(uint16_t source_port, uint16_t open_port, uint16_t closed_port, char *dest_ip) {
+    struct tcp_probe *tcp_probes = malloc(6 * sizeof(struct tcp_probe));
+    if (tcp_probes == NULL) {
+        perror("Failed to allocate memory for TCP probes");
+        exit(EXIT_FAILURE);
+    }
+
+    uint32_t base_seq_num = rand(); 
+    uint32_t base_ack_num = rand();
+
+    tcp_probes[0] = (struct tcp_probe){
+        .dest_ip = dest_ip,
+        .source_port = source_port,
+        .dest_port = open_port,
+        .seq_num = base_seq_num,
+        .ack_num = base_ack_num,
+        .tcp_flags = 0x0, // null flags
+        .window_size = 128,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
+        .ip_DF = true,
+        .tcp_options = {
+            TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
+            TCPOPT_NOP, // NOP
+            TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x01, 0x09, // MSS = 265
+            TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
+            0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
+            0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
+            TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
+        },
+        .tcp_options_len = 20
+    };
+    tcp_probes[1] = (struct tcp_probe){
+        .dest_ip = dest_ip,
+        .source_port = source_port + 1,
+        .dest_port = open_port,
+        .seq_num = base_seq_num + 1,
+        .ack_num = base_ack_num,
+        .tcp_flags = TH_SYN | TH_FIN | TH_URG | TH_PUSH, // SYN, FIN, URG, PUSH flags set
+        .window_size = 256,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
+        .ip_DF = false,
+        .tcp_options = {
+            TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
+            TCPOPT_NOP, // NOP
+            TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x01, 0x09, // MSS = 265
+            TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
+            0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
+            0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
+            TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
+        },
+        .tcp_options_len = 20
+    };
+    tcp_probes[2] = (struct tcp_probe){
+        .dest_ip = dest_ip,
+        .source_port = source_port + 2,
+        .dest_port = open_port,
+        .seq_num = base_seq_num + 2,
+        .ack_num = base_ack_num,
+        .tcp_flags = TH_ACK, // ACK flag
+        .window_size = 1024,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
+        .ip_DF = true,
+        .tcp_options = {
+            TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
+            TCPOPT_NOP, // NOP
+            TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x01, 0x09, // MSS = 265
+            TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
+            0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
+            0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
+            TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
+        },
+        .tcp_options_len = 20
+    };
+    tcp_probes[3] = (struct tcp_probe){
+        .dest_ip = dest_ip,
+        .source_port = source_port + 3,
+        .dest_port = closed_port,
+        .seq_num = base_seq_num + 3,
+        .ack_num = base_ack_num,
+        .tcp_flags = TH_SYN, // SYN flags
+        .window_size = 31337,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
+        .ip_DF = true,
+        .tcp_options = {
+            TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
+            TCPOPT_NOP, // NOP
+            TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x01, 0x09, // MSS = 265
+            TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
+            0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
+            0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
+            TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
+        },
+        .tcp_options_len = 20
+    };
+    tcp_probes[4] = (struct tcp_probe){
+        .dest_ip = dest_ip,
+        .source_port = source_port + 4,
+        .dest_port = closed_port,
+        .seq_num = base_seq_num + 4,
+        .ack_num = base_ack_num,
+        .tcp_flags = TH_ACK, // ACK flag
+        .window_size = 32768,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
+        .ip_DF = true,
+        .tcp_options = {
+            TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
+            TCPOPT_NOP, // NOP
+            TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x01, 0x09, // MSS = 265
+            TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
+            0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
+            0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
+            TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
+        },
+        .tcp_options_len = 20
+    };
+    tcp_probes[5] = (struct tcp_probe){
+        .dest_ip = dest_ip,
+        .source_port = source_port + 5,
+        .dest_port = closed_port,
+        .seq_num = base_seq_num + 5,
+        .ack_num = base_ack_num,
+        .tcp_flags = TH_FIN | TH_URG | TH_PUSH, // FIN, URG, PUSH flags set
+        .window_size = 65535,
+        .urgent_pointer = 0,
+        .reseved_bit = false,
+        .ip_DF = false,
+        .tcp_options = {
+            TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0F, // winow scale = 15
+            TCPOPT_NOP, // NOP
+            TCPOPT_MAXSEG, TCPOLEN_MAXSEG, 0x01, 0x09, // MSS = 265
+            TCPOPT_TIMESTAMP, TCPOLEN_TIMESTAMP, // Timestamp
+            0xFF, 0xFF, 0xFF, 0xFF, // Timestamp TSval
+            0x00, 0x00, 0x00, 0x00, // Timestamp TSecr
+            TCPOPT_SACK_PERMITTED, TCPOLEN_SACK_PERMITTED, // SACK permitted
+        },
+        .tcp_options_len = 20
+    };
+
+    return tcp_probes;
 }

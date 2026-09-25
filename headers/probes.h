@@ -20,7 +20,8 @@ struct tcp_probe {
     uint32_t ack_num;
     uint8_t tcp_flags;
     uint16_t window_size;
-
+    
+    bool ip_DF; // Don't Fragment bit
     uint16_t urgent_pointer;
     bool reseved_bit;
 
@@ -30,8 +31,6 @@ struct tcp_probe {
 
 struct icmp_probe {
     char *dest_ip;
-    uint16_t source_port;
-    uint16_t dest_port;
     uint8_t icmp_type;
     uint8_t icmp_code;
     uint16_t icmp_identifier;
@@ -44,7 +43,7 @@ struct icmp_probe {
 };
 
 struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
-struct icmp_probe *ICMP_echo_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
+struct icmp_probe *ICMP_echo_probe_spec(char *dest_ip);
 struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
 
 #endif /* PROBES_H */

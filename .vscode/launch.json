@@ -16,6 +16,12 @@
             "externalConsole": false,
             "MIMode": "gdb",
             "miDebuggerPath": "/usr/bin/gdb",
+            "pipeTransport": {
+                "pipeProgram": "${workspaceFolder}/.vscode/gdb-root.sh",
+                "pipeArgs": [],
+                "debuggerPath": "/usr/bin/gdb",
+                "pipeCwd": "${workspaceFolder}"
+            },
             "preLaunchTask": "Build project",
             "setupCommands": [
                 {
@@ -40,6 +46,12 @@
             "externalConsole": false,
             "MIMode": "gdb",
             "miDebuggerPath": "/usr/bin/gdb",
+            "pipeTransport": {
+                "pipeProgram": "${workspaceFolder}/.vscode/gdb-root.sh",
+                "pipeArgs": [],
+                "debuggerPath": "/usr/bin/gdb",
+                "pipeCwd": "${workspaceFolder}"
+            },
             "preLaunchTask": "Build project",
             "setupCommands": [
                 {

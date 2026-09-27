@@ -213,8 +213,6 @@ struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, ch
     return tcp_probe;
 }
 
-
-
 struct tcp_probe *tcp_t_probes_spec(uint16_t source_port, uint16_t open_port, uint16_t closed_port, char *dest_ip) {
     struct tcp_probe *tcp_probes = malloc(6 * sizeof(struct tcp_probe));
     if (tcp_probes == NULL) {
@@ -359,4 +357,20 @@ struct tcp_probe *tcp_t_probes_spec(uint16_t source_port, uint16_t open_port, ui
     };
 
     return tcp_probes;
+}
+
+struct udp_probe udp_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
+    struct udp_probe udp_probe = {0};
+
+    udp_probe = (struct udp_probe){
+        .dest_ip = dest_ip,
+        .source_port = source_port,
+        .dest_port = dest_port,
+        .ip_id = 0x1042,
+    };
+
+    memset(udp_probe.payload, 'C', sizeof(udp_probe.payload));
+    udp_probe.payload_len = sizeof(udp_probe.payload);
+
+    return udp_probe;
 }

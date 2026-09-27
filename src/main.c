@@ -15,6 +15,36 @@ char *target_IP;
 char *OPEN_PORT;
 char *CLOSED_PORT;
 
+static bool matches_quoted_udp(const struct udp_probe *probe, const uint8_t *ip, size_t len, struct in_addr source_ip, struct in_addr target_ip) {
+    if (ip == NULL || len < 20 ||
+        (ip[0] >> 4) != 4 || ip[9] != IPPROTO_UDP) {
+        return false;
+    }
+
+    size_t ihl = (ip[0] & 0x0Fu) * 4u;
+
+    if (ihl < 20 || ihl > len || len - ihl < 8) {
+        return false;
+    }
+
+    /* Reject noninitial fragments. */
+    if ((ip[6] & 0x1Fu) != 0 || ip[7] != 0) {
+        return false;
+    }
+
+    if (memcmp(ip + 12, &source_ip.s_addr, 4) != 0 ||
+        memcmp(ip + 16, &target_ip.s_addr, 4) != 0) {
+        return false;
+    }
+
+    const uint8_t *udp = ip + ihl;
+    uint16_t src_port = ((uint16_t)udp[0] << 8) | udp[1];
+    uint16_t dst_port = ((uint16_t)udp[2] << 8) | udp[3];
+
+    return src_port == probe->source_port &&
+           dst_port == probe->dest_port;
+}
+
 static bool response_matches_probe(const struct probe_result *probe, const struct parsed_info *response, struct in_addr source_ip) {
     struct in_addr target_ip;
     const char *target;
@@ -26,7 +56,14 @@ static bool response_matches_probe(const struct probe_result *probe, const struc
         }
         target = probe->probe_sent.tcp.dest_ip;
         break;
-
+    case UDP_PROBE:
+        if (response->ip_protocol != IPPROTO_ICMP ||
+            response->app_protocol.icmp_ap.type != ICMP_DEST_UNREACH ||
+            response->app_protocol.icmp_ap.code != ICMP_PORT_UNREACH) {
+            return false;
+        }
+        target = probe->probe_sent.udp.dest_ip;
+        break;
     case ICMP_PROBE:
         if (response->ip_protocol != IPPROTO_ICMP ||
             response->app_protocol.icmp_ap.type != ICMP_ECHOREPLY) {
@@ -52,19 +89,13 @@ static bool response_matches_probe(const struct probe_result *probe, const struc
 
     switch (probe->probe_type) {
     case TCP_PROBE:
-        return
-            probe->probe_sent.tcp.source_port ==
-                response->app_protocol.tcp_ap.dst_port &&
-            probe->probe_sent.tcp.dest_port ==
-                response->app_protocol.tcp_ap.src_port;
-
+        return probe->probe_sent.tcp.source_port == response->app_protocol.tcp_ap.dst_port &&
+            probe->probe_sent.tcp.dest_port == response->app_protocol.tcp_ap.src_port;
     case ICMP_PROBE:
-        return
-            probe->probe_sent.icmp.icmp_identifier ==
-                response->app_protocol.icmp_ap.header.echo.id &&
-            probe->probe_sent.icmp.icmp_sequence ==
-                response->app_protocol.icmp_ap.header.echo.seq;
-
+        return probe->probe_sent.icmp.icmp_identifier == response->app_protocol.icmp_ap.header.echo.id &&
+            probe->probe_sent.icmp.icmp_sequence == response->app_protocol.icmp_ap.header.echo.seq;
+    case UDP_PROBE:
+        return matches_quoted_udp(&probe->probe_sent.udp, response->app_protocol.icmp_ap.payload, response->app_protocol.icmp_ap.payload_len, source_ip, target_ip);
     default:
         return false;
     }
@@ -134,7 +165,7 @@ int main(int argc, char **argv)
     const uint16_t udp_source_port = last_tcp_source_port + 1;
 
     struct network net = {0};
-    if (network_init(&net, "eth0", src_IP, target_IP, SRC_PORT_INIT, last_tcp_source_port, udp_source_port) != 0) {
+    if (network_init(&net, "eth0", src_IP, target_IP, SRC_PORT_INIT, last_tcp_source_port) != 0) {
         return EXIT_FAILURE;
     }
 
@@ -251,10 +282,10 @@ int main(int argc, char **argv)
     }
 
     for (size_t i = 0; i < TX_COUNT; i++) {
-        probes_results[T2_INDEX + i].probe_id = T2_INDEX + i;
-        probes_results[T2_INDEX + i].status = PROBE_NOT_SENT;
-        probes_results[T2_INDEX + i].probe_sent.tcp = t2_t7_tcp_probes[i];
-        probes_results[T2_INDEX + i].probe_type = TCP_PROBE;
+        probes_results[T2 + i].probe_id = T2 + i;
+        probes_results[T2 + i].status = PROBE_NOT_SENT;
+        probes_results[T2 + i].probe_sent.tcp = t2_t7_tcp_probes[i];
+        probes_results[T2 + i].probe_type = TCP_PROBE;
 
         t2_t7_tcp_packets[i] = construct_TCP_packet(t2_t7_tcp_probes[i], src_IP, &t2_t7_tcp_packet_len[i]);
         if (t2_t7_tcp_packets[i] == NULL) {
@@ -267,18 +298,45 @@ int main(int argc, char **argv)
     // T2-T7 TCP Packet Sending
     for (size_t i = 0; i < TX_COUNT; i++) {
         printf("Sending T%zu TCP packet to: %s\n", i + 2, target_IP);
-        probes_results[T2_INDEX + i].sent_at = (struct timespec){0};
+        probes_results[T2 + i].sent_at = (struct timespec){0};
 
-        clock_gettime(CLOCK_MONOTONIC, &probes_results[T2_INDEX + i].sent_at);
+        clock_gettime(CLOCK_MONOTONIC, &probes_results[T2 + i].sent_at);
         if (send_packet(&net, t2_t7_tcp_packets[i], t2_t7_tcp_packet_len[i], target_IP) != 0) {
             fprintf(stderr, "Failed to send T%zu probe\n", i + 2);
             return EXIT_FAILURE;
         }
-        probes_results[T2_INDEX + i].status = PROBE_NO_RESPONSE;
+        probes_results[T2 + i].status = PROBE_NO_RESPONSE;
     }   
-
-
     printf("\n");
+
+
+    // UDP Probe + Packet Construction
+    struct udp_probe udp_probe = udp_probe_spec(udp_source_port, atoi(CLOSED_PORT), target_IP);
+    size_t udp_packet_len = 0;
+    uint8_t *udp_packet = construct_UDP_packet(udp_probe, src_IP, &udp_packet_len);
+    probes_results[U1].probe_id = U1;
+    probes_results[U1].status = PROBE_NOT_SENT;
+    probes_results[U1].probe_sent.udp = udp_probe;
+    probes_results[U1].probe_type = UDP_PROBE;
+    if (udp_packet == NULL) {
+        fprintf(stderr, "Failed to construct UDP packet\n");
+        return EXIT_FAILURE;
+    }
+    printf("Constructed UDP packet of length: %zu bytes\n", udp_packet_len);
+
+
+    // UDP Packet Sending
+    printf("Sending UDP packet to: %s\n", target_IP);
+    probes_results[U1].sent_at = (struct timespec){0};
+    clock_gettime(CLOCK_MONOTONIC, &probes_results[U1].sent_at);
+    if (send_packet(&net, udp_packet, udp_packet_len, target_IP) != 0) {
+        fprintf(stderr, "Failed to send UDP probe\n");
+        return EXIT_FAILURE;
+    }
+    probes_results[U1].status = PROBE_NO_RESPONSE;
+
+    printf("\nAll probes sent. Waiting for responses...\n\n");
+
 
     // Receive and Match Responses
     struct in_addr source_address;

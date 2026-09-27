@@ -12,9 +12,21 @@
 #define ECN 6
 #define IE1 7
 #define IE2 8
+#define T2 9
+#define T3 10
+#define T4 11
+#define T5 12
+#define T6 13
+#define T7 14
+#define U1 15
+
+#define SEQ_PROBE_COUNT 6
+#define NUM_ICMP_PROBES 2
+#define ECN_INDEX SEQ_PROBE_COUNT + 2 // Sequence probes (6) + 2 ICMP probes = 8
+#define TX_COUNT 6
+#define NUM_PROBES_SENT (SEQ_PROBE_COUNT + 1 + 2 + TX_COUNT + 1) // 6 sequence probes + 1 ECN probe + 2 ICMP probes + 6 T2-T7 probes + 1 U1 probe = 16 
 
 #define SRC_PORT_INIT 1000
-#define NUM_ICMP_PROBES 2
 
 enum probe_status {
     PROBE_NOT_SENT,
@@ -38,9 +50,9 @@ struct probe_result {
     } probe_type;
 
     union {
-        struct tcp_probe tcp; /* The probe specification used to generate the packet */
-        struct icmp_probe icmp; /* The probe specification used to generate the packet */
-        // struct udp_probe udp; /* The probe specification used to generate the packet */
+        struct tcp_probe tcp; // The probe specification used to generate the packet 
+        struct icmp_probe icmp; 
+        struct udp_probe udp; 
     } probe_sent;
 
 
@@ -52,4 +64,4 @@ struct probe_result {
     // bool ack_matched;
 };
 
-#endif /* STRUCTURES_H */
+#endif

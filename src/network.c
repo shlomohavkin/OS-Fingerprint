@@ -1,7 +1,7 @@
 #include "network.h"
 
 
-int network_init(struct network *net, char *interface_name, char *source_ip, char *target_ip, uint16_t first_tcp_source_port, uint16_t last_tcp_source_port, uint16_t udp_source_port) {
+int network_init(struct network *net, char *interface_name, char *source_ip, char *target_ip, uint16_t first_tcp_source_port, uint16_t last_tcp_source_port) {
     if (net == NULL) {
         return -1; // Invalid argument
     }
@@ -48,15 +48,12 @@ int network_init(struct network *net, char *interface_name, char *source_ip, cha
         filter_expr, sizeof(filter_expr),
         "ip and src host %s and dst host %s and "
         "((tcp and dst portrange %u-%u) or "
-        "(udp and dst port %u) or "
         "(icmp and (icmp[0] = 0 or "
         "(icmp[0] = 3 and icmp[1] = 3))))",
         target_ip,
         source_ip,
         (unsigned int)first_tcp_source_port,
-        (unsigned int)last_tcp_source_port,
-        (unsigned int)udp_source_port
-    );
+        (unsigned int)last_tcp_source_port);
 
     if (written < 0 || (size_t)written >= sizeof(filter_expr)) {
         fprintf(stderr, "Capture filter buffer is too small\n");

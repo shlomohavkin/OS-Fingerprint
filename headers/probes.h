@@ -42,9 +42,21 @@ struct icmp_probe {
     size_t payload_len;
 };
 
+struct udp_probe {
+    char *dest_ip;
+    uint16_t source_port;
+    uint16_t dest_port;
+    uint16_t ip_id;
+
+    uint8_t payload[300];
+    size_t payload_len;
+};
+
 struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
 struct icmp_probe *ICMP_echo_probe_spec(char *dest_ip);
 struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
 struct tcp_probe *tcp_t_probes_spec(uint16_t source_port, uint16_t open_port, uint16_t closed_port, char *dest_ip);
+struct udp_probe udp_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
 
-#endif /* PROBES_H */
+
+#endif 

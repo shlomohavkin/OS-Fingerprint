@@ -786,7 +786,7 @@ struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     // T2-T7 tests 
     struct probe_result t_probes[TX_COUNT];
     for (size_t i = 0; i < TX_COUNT; i++) {
-        t_probes[i] = probes[T2_INDEX + i];
+        t_probes[i] = probes[T2 + i];
     }
     for (size_t i = 0; i < TX_COUNT; i++) {
         if (calculate_t_tests(t_probes[i], &fingerprint.tcp[i + 1]) < 0) {

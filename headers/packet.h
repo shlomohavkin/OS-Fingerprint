@@ -87,6 +87,7 @@ struct parsed_info {
 
 uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, size_t *packet_len);
 uint8_t *construct_ICMP_packet(struct icmp_probe icmp_probe_spec, char *source_ip, size_t *packet_len);
+uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, size_t *packet_len);
 uint16_t calculate_checksum(uint8_t *data, size_t len);
 
 

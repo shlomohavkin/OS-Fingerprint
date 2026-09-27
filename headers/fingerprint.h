@@ -11,15 +11,6 @@
 #include <zlib.h> // For CRC32 calculation
 
 
-#define SEQ_PROBE_COUNT 6
-#define ECN_INDEX SEQ_PROBE_COUNT + 2 // Sequence probes (6) + 2 ICMP probes = 8
-#define TX_COUNT 6
-#define T2_INDEX (ECN_INDEX + 1)
-#define TX_COUNT 6
-#define NUM_PROBES_SENT (SEQ_PROBE_COUNT + 1 + 2 + TX_COUNT) // 6 sequence probes + 1 ECN probe + 2 ICMP probes + 6 T2-T7 probes = 15  
-
-
-
 #define OPS_STRING_MAX_LENGTH 128
 #define OPTIONS_MAX_LENGTH 40
 #define UNAVAILABLE_SIG UINT32_MAX

@@ -16,7 +16,7 @@ struct network {
     pcap_t *pcap_handle;
 };
 
-int network_init(struct network *net, char *interface_name, char *source_ip, char *target_ip, uint16_t first_tcp_source_port, uint16_t last_tcp_source_port, uint16_t udp_source_port);
+int network_init(struct network *net, char *interface_name, char *source_ip, char *target_ip, uint16_t first_tcp_source_port, uint16_t last_tcp_source_port);
 int send_packet(struct network *net, uint8_t *packet, size_t packet_len, char *target_ip);
 int receive_packet(struct network *net, struct parsed_info *parsed);
 

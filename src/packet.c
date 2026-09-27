@@ -346,32 +346,32 @@ static int parse_icmp_response(const uint8_t *icmp, size_t message_len, struct p
     return 1;
 }
 
-// static int parse_udp_response(const uint8_t *udp, size_t available_len, struct parsed_info *out) {
-//     if (available_len < UDP_HEADER_SIZE) {
-//         return 0;
-//     }
+/*  static int parse_udp_response(const uint8_t *udp, size_t available_len, struct parsed_info *out) {
+    if (available_len < UDP_HEADER_SIZE) {
+        return 0;
+    }
 
-//     uint16_t udp_len = read_u16(udp + 4);
+    uint16_t udp_len = read_u16(udp + 4);
 
-//     if (udp_len < UDP_HEADER_SIZE || udp_len > available_len) {
-//         return 0;
-//     }
+    if (udp_len < UDP_HEADER_SIZE || udp_len > available_len) {
+        return 0;
+    }
 
-//     out->app_protocol.udp_ap.src_port = read_u16(udp);
-//     out->app_protocol.udp_ap.dst_port = read_u16(udp + 2);
-//     out->app_protocol.udp_ap.length = udp_len;
-//     out->app_protocol.udp_ap.checksum = read_u16(udp + 6);
+    out->app_protocol.udp_ap.src_port = read_u16(udp);
+    out->app_protocol.udp_ap.dst_port = read_u16(udp + 2);
+    out->app_protocol.udp_ap.length = udp_len;
+    out->app_protocol.udp_ap.checksum = read_u16(udp + 6);
 
-//     size_t payload_len = (size_t)udp_len - UDP_HEADER_SIZE;
-//     out->app_protocol.udp_ap.payload_len = payload_len;
+    size_t payload_len = (size_t)udp_len - UDP_HEADER_SIZE;
+    out->app_protocol.udp_ap.payload_len = payload_len;
 
-//     if (copy_bytes(&out->app_protocol.udp_ap.payload,
-//                    udp + UDP_HEADER_SIZE, payload_len) < 0) {
-//         return -1;
-//     }
+    if (copy_bytes(&out->app_protocol.udp_ap.payload,
+                   udp + UDP_HEADER_SIZE, payload_len) < 0) {
+        return -1;
+    }
 
-//     return 1;
-// }
+    return 1;
+} */
 
 int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int datalink, struct parsed_info *parsed) {
     if (parsed == NULL) {

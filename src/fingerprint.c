@@ -151,12 +151,90 @@ uint32_t calculate_sp_test(struct probe_result *probes, uint32_t gcd_value) {
     return deviation <= 1.0 ? 0 : (uint32_t)round(8.0 * log2(deviation));
 }
 
+enum ip_id_test_type {
+    IP_ID_TEST_TI,
+    IP_ID_TEST_CI,
+    IP_ID_TEST_II
+};
 
-struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct probe_result *probes) {
-    struct ip_id_fingerprint result = {.kind = IP_ID_UNAVAILABLE};
-    struct seq_samples samples = find_seq_samples(probes);
-    if (samples.count < 3) {
-        return result;
+int calculate_ip_id_fingerprints(struct probe_result *probes, size_t probe_count, enum ip_id_test_type test_type, struct ip_id_fingerprint *result) {
+     if (result == NULL) {
+        return -1;
+    }
+
+    *result = (struct ip_id_fingerprint){
+        .kind = IP_ID_UNAVAILABLE
+    };
+
+    if (probes == NULL && probe_count != 0) {
+        return -1;
+    }
+
+    size_t minimum_samples;
+    size_t maximum_probes;
+
+    switch (test_type) {
+    case IP_ID_TEST_TI:
+        minimum_samples = 3;
+        maximum_probes = SEQ_PROBE_COUNT;
+        break;
+
+    case IP_ID_TEST_CI:
+        minimum_samples = 2;
+        maximum_probes = 3;
+        break;
+
+    case IP_ID_TEST_II:
+        minimum_samples = 2;
+        maximum_probes = 2;
+        break;
+
+    default:
+        return -1;
+    }
+
+    if (probe_count > maximum_probes) {
+        return -1;
+    }
+
+    // Sample collection
+    uint16_t ids[SEQ_PROBE_COUNT] = {0};
+    size_t sample_count = 0;
+
+    for (size_t i = 0; i < probe_count; i++) {
+        if (probes[i].status != PROBE_RECEIVED) {
+            continue;
+        }
+
+        const struct parsed_info *response = &probes[i].parsed_response;
+
+        if (test_type == IP_ID_TEST_II) {
+            if (probes[i].probe_type != ICMP_PROBE ||
+                response->ip_protocol != IPPROTO_ICMP ||
+                response->app_protocol.icmp_ap.type != ICMP_ECHOREPLY) {
+                continue;
+            }
+        } else {
+            if (probes[i].probe_type != TCP_PROBE ||
+                response->ip_protocol != IPPROTO_TCP) {
+                continue;
+            }
+
+            // TI uses SYN/ACK replies to the sequence probes. 
+            if (test_type == IP_ID_TEST_TI) {
+                uint8_t flags = response->app_protocol.tcp_ap.flags;
+
+                if ((flags & (TH_SYN | TH_ACK | TH_RST)) != (TH_SYN | TH_ACK)) {
+                    continue;
+                }
+            }
+        }
+
+        ids[sample_count++] = response->ip_id;
+    }
+
+    if (sample_count < minimum_samples) {
+        return 0;
     }
 
     bool is_all_zero = true;
@@ -166,42 +244,47 @@ struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct probe_result *pr
     bool is_all_even = true;
     bool is_random_positive = false;
 
-    for (size_t i = 0; i < samples.count; i++) {
-        if (probes[samples.index[i]].parsed_response.ip_id != 0) {
+    for (size_t i = 0; i < sample_count; i++) {
+        if (ids[i] != 0) {
             is_all_zero = false;
         }
     }
+
     if (is_all_zero) {
-        result.kind = IP_ID_ZERO;
-        return result;
+        result->kind = IP_ID_ZERO;
+        return 1;
     }
 
-    for (size_t i = 0; i + 1 < samples.count; i++) {
-        uint16_t curr_id = probes[samples.index[i]].parsed_response.ip_id;
-        uint16_t next_id = probes[samples.index[i + 1]].parsed_response.ip_id;
-
+    for (size_t i = 0; i + 1 < sample_count; i++) {
         // To match Nmap's implementation: we first check RD on the 32-bit
         // subtraction before reducing the difference to 16 bits.
         // This can classify a decreasing IP ID as RD.
-        uint32_t raw_diff = (uint32_t)next_id - (uint32_t)curr_id;
-        if (raw_diff > 20000u) {
-            result.kind = IP_ID_RANDOM;
-            return result;
+        uint32_t raw_diff =
+            (uint32_t)ids[i + 1] - (uint32_t)ids[i];
+
+        if (sample_count > 2 && raw_diff > 20000u) {
+            result->kind = IP_ID_RANDOM;
+            return 1;
         }
 
         uint16_t diff = (uint16_t)raw_diff;
+
         if (diff != 0) {
             is_identical = false;
         }
+
         if (!(diff % 256 == 0 && diff <= 5120)) {
             is_broken_incremental = false;
         }
+
         if (diff >= 10) {
             is_incremental = false;
         }
+
         if (diff % 2 != 0) {
             is_all_even = false;
         }
+
         if ((diff % 256 != 0 && diff > 1000) ||
             (diff % 256 == 0 && diff >= 25600)) {
             is_random_positive = true;
@@ -209,16 +292,17 @@ struct ip_id_fingerprint calculate_ip_id_fingerprints_ti(struct probe_result *pr
     }
 
     if (is_identical) {
-        result.kind = IP_ID_CONSTANT;
-        result.constant_value = probes[samples.index[0]].parsed_response.ip_id;
+        result->kind = IP_ID_CONSTANT;
+        result->constant_value = ids[0];
     } else if (is_random_positive) {
-        result.kind = IP_ID_RANDOM_POSITIVE;
+        result->kind = IP_ID_RANDOM_POSITIVE;
     } else if (is_broken_incremental) {
-        result.kind = IP_ID_BROKEN_INCREMENTAL;
+        result->kind = IP_ID_BROKEN_INCREMENTAL;
     } else if (is_all_even || is_incremental) {
-        result.kind = IP_ID_INCREMENTAL;
+        result->kind = IP_ID_INCREMENTAL;
     }
-    return result;
+
+    return result->kind != IP_ID_UNAVAILABLE ? 1 : 0;
 }
 
 struct timestamp_fingerprint calculate_timestamp_fingerprint(struct probe_result *probes) {
@@ -290,12 +374,11 @@ int calculate_seq_fingerprint(struct probe_result *probes, struct seq_fingerprin
     fingerprint->gcd = calculate_gcd_test(probes);
     fingerprint->isr = calculate_isr_test(probes);
     fingerprint->sp = calculate_sp_test(probes, fingerprint->gcd);
-    fingerprint->ti = calculate_ip_id_fingerprints_ti(probes);
     fingerprint->ts = calculate_timestamp_fingerprint(probes);
     fingerprint->metrics_present = fingerprint->isr != UNAVAILABLE_SIG &&
                                     fingerprint->sp != UNAVAILABLE_SIG && 
                                     fingerprint->gcd != UNAVAILABLE_SIG;
-    /* CI, II and SS remain unavailable until their additional probes exist. */
+    /* SS remain unavailable until their additional probes exist. */
     return 1;
 }
 
@@ -619,6 +702,42 @@ int calculate_ie_fingerprint(struct probe_result probes[2], struct ie_fingerprin
     return 1;
 }
 
+int calculate_shared_sequence(struct probe_result *seq_probes, struct probe_result *ie_probes, struct seq_fingerprint *seq_fingerprint) {
+    if (seq_probes == NULL || ie_probes == NULL || seq_fingerprint == NULL) {
+        return -1;
+    }
+
+    seq_fingerprint->ss = SHARED_SEQUENCE_UNAVAILABLE;
+
+    if (ie_probes[0].status != PROBE_RECEIVED || ie_probes[1].status != PROBE_RECEIVED) {
+        return 0; // If either of the IE probes were not received, return unavailable
+    }
+
+    if ((seq_fingerprint->ii.kind != IP_ID_RANDOM_POSITIVE && seq_fingerprint->ii.kind != IP_ID_BROKEN_INCREMENTAL && seq_fingerprint->ii.kind != IP_ID_INCREMENTAL) ||
+        (seq_fingerprint->ti.kind != IP_ID_RANDOM_POSITIVE && seq_fingerprint->ti.kind != IP_ID_BROKEN_INCREMENTAL && seq_fingerprint->ti.kind != IP_ID_INCREMENTAL)) {
+        return 0; // If the II test is not random positive, return unavailable
+    }
+
+    struct seq_samples samples = find_seq_samples(seq_probes);
+    if (samples.count < 3) {
+        return 0; // If there are not enough sequence samples, return unavailable
+    }
+
+    size_t first_index = samples.index[0];
+    size_t last_index = samples.index[samples.count - 1];
+
+    uint32_t avg = seq_probes[last_index].parsed_response.ip_id - seq_probes[first_index].parsed_response.ip_id;
+    avg /= (uint32_t)(samples.count - 1);
+
+    if (ie_probes[0].parsed_response.ip_id < seq_probes[last_index].parsed_response.ip_id + 3 * avg) {
+        seq_fingerprint->ss = SHARED_SEQUENCE_SAME;
+    } else {
+        seq_fingerprint->ss = SHARED_SEQUENCE_OTHER;
+    }
+
+    return 1;
+}
+
 struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     struct os_fingerprint fingerprint = {0};
     if (probes == NULL) {
@@ -650,12 +769,6 @@ struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
         fingerprint.win[i] = probes[i].parsed_response.app_protocol.tcp_ap.win_size;
     }
 
-    // ECN tests
-    struct probe_result ecn_probe = probes[ECN];
-    if (calculate_ecn_fingerprint(ecn_probe, &fingerprint.ecn) < 0) {
-        return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
-    }
-
     // IE tests
     struct probe_result ie_probes[2];
     ie_probes[0] = probes[IE1];
@@ -663,6 +776,37 @@ struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     if (calculate_ie_fingerprint(ie_probes, &fingerprint.ie) < 0) {
         return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
     }
+
+    // ECN tests
+    struct probe_result ecn_probe = probes[ECN];
+    if (calculate_ecn_fingerprint(ecn_probe, &fingerprint.ecn) < 0) {
+        return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
+    }
+
+    // T2-T7 tests 
+    struct probe_result t_probes[TX_COUNT];
+    for (size_t i = 0; i < TX_COUNT; i++) {
+        t_probes[i] = probes[T2_INDEX + i];
+    }
+    for (size_t i = 0; i < TX_COUNT; i++) {
+        if (calculate_t_tests(t_probes[i], &fingerprint.tcp[i + 1]) < 0) {
+            return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
+        }
+    }
+
+    // IP ID tests
+    // 6 sequence probes for TI, 3 T probes (to the closed port) for CI, and 2 icmp probes for II
+    if (calculate_ip_id_fingerprints(seq_tcp_probes, SEQ_PROBE_COUNT, IP_ID_TEST_TI, &fingerprint.seq.ti) < 0 ||
+        calculate_ip_id_fingerprints(&t_probes[3], 3, IP_ID_TEST_CI, &fingerprint.seq.ci) < 0 || // only the last 3 T probes are used for CI
+        calculate_ip_id_fingerprints(ie_probes, 2, IP_ID_TEST_II, &fingerprint.seq.ii) < 0) {
+        return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
+    }
+
+    // SS test
+    if (calculate_shared_sequence(seq_tcp_probes, ie_probes, &fingerprint.seq) < 0) {
+        return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
+    }
+
 
 
 

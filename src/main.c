@@ -11,11 +11,6 @@
 #include <arpa/inet.h> 
 
 
-
-#define NUM_PROBES_SENT (SEQ_PROBE_COUNT + 1 + 2) // 6 sequence probes + 1 ECN probe + 2 ICMP probes
-#define ECN_INDEX SEQ_PROBE_COUNT
-
-
 char *target_IP;
 char *OPEN_PORT;
 char *CLOSED_PORT;
@@ -114,7 +109,7 @@ int main(int argc, char **argv)
 {
     srand((unsigned)time(NULL));
 
-    if (argc < 3 || argc > 3) {
+    if (argc != 3) {
         printf("Usage: %s <target_ip> <target_ports>\n", argv[0]);
         return 1;
     } 
@@ -124,7 +119,7 @@ int main(int argc, char **argv)
     OPEN_PORT = strtok(argv[2], ","); 
     CLOSED_PORT = strtok(NULL, "");
     if (OPEN_PORT == NULL || CLOSED_PORT == NULL) {
-        printf("Error: Invalid target ports format. Please provide ports in the format <open_port>,<closed_port>\n");
+        fprintf(stderr, "Error: Invalid target ports format. Please provide ports in the format <open_port>,<closed_port>\n");
         return 1;
     }
 
@@ -133,8 +128,13 @@ int main(int argc, char **argv)
     printf("Closed port: %s\n\n", CLOSED_PORT);
 
 
+    const uint16_t ecn_source_port = SRC_PORT_INIT + SEQ_PROBE_COUNT;
+    const uint16_t t_first_source_port = ecn_source_port + 1;
+    const uint16_t last_tcp_source_port = t_first_source_port + TX_COUNT - 1;
+    const uint16_t udp_source_port = last_tcp_source_port + 1;
+
     struct network net = {0};
-    if (network_init(&net, "eth0", target_IP) != 0) {
+    if (network_init(&net, "eth0", src_IP, target_IP, SRC_PORT_INIT, last_tcp_source_port, udp_source_port) != 0) {
         return EXIT_FAILURE;
     }
 
@@ -142,8 +142,8 @@ int main(int argc, char **argv)
 
     // Sequence TCP Probes Construction
     struct tcp_probe *seq_tcp_probes = sequence_generation_TCP_spec(SRC_PORT_INIT, atoi(OPEN_PORT), target_IP);
-    uint8_t *seq_tcp_packets[6] = {0};
-    size_t seq_tcp_packet_len[6] = {0};
+    uint8_t *seq_tcp_packets[SEQ_PROBE_COUNT] = {0};
+    size_t seq_tcp_packet_len[SEQ_PROBE_COUNT] = {0};
     if (seq_tcp_probes == NULL) {
         fprintf(stderr, "Failed to create sequence probe specifications\n");
         return EXIT_FAILURE;
@@ -167,32 +167,30 @@ int main(int argc, char **argv)
 
     // ICMP Echo Probes + Packet Construction
     struct icmp_probe *icmp_probes = ICMP_echo_probe_spec(target_IP);
+    if (icmp_probes == NULL) {
+        fprintf(stderr, "Failed to create ICMP probe specifications\n");
+        return EXIT_FAILURE;
+    }
     size_t icmp_packet_lens[2] = {0};
     uint8_t *icmp_packets[2] = {0};
     icmp_packets[0] = construct_ICMP_packet(icmp_probes[0], src_IP, &icmp_packet_lens[0]);
     icmp_packets[1] = construct_ICMP_packet(icmp_probes[1], src_IP, &icmp_packet_lens[1]);
     for (size_t i = 0; i < NUM_ICMP_PROBES; i++) {
+        if (icmp_packets[i] == NULL) {
+            fprintf(stderr, "Failed to construct ICMP probe %zu\n", i + 1);
+            return EXIT_FAILURE;
+        }
         probes_results[IE1 + i].probe_id = IE1 + i;
         probes_results[IE1 + i].status = PROBE_NOT_SENT;
         probes_results[IE1 + i].probe_sent.icmp = icmp_probes[i];
         probes_results[IE1 + i].probe_type = ICMP_PROBE;
     }
 
-    // ECN TCP Probe + Packet Construction
-    struct tcp_probe ecn_tcp_probe = tcp_ecn_probe_spec(SRC_PORT_INIT + ECN_INDEX, atoi(OPEN_PORT), target_IP);
-    size_t ecn_tcp_packet_len = 0;
-    uint8_t *ecn_tcp_packet = construct_TCP_packet(ecn_tcp_probe, src_IP, &ecn_tcp_packet_len);
-    probes_results[ECN].probe_id = ECN;
-    probes_results[ECN].status = PROBE_NOT_SENT;
-    probes_results[ECN].probe_sent.tcp = ecn_tcp_probe;
-    probes_results[ECN].probe_type = TCP_PROBE;
-
     printf("\n");
 
     // Sequence TCP Packet Sending
-    for (size_t i = 0; i < 6; i++) {
+    for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
         printf("Sending sequence TCP packet %zu to: %s\n", i + 1, target_IP);
-        probes_results[i].status = PROBE_NO_RESPONSE;
         probes_results[i].sent_at = (struct timespec){0};
 
         clock_gettime(CLOCK_MONOTONIC, &probes_results[i].sent_at);
@@ -200,59 +198,173 @@ int main(int argc, char **argv)
             fprintf(stderr, "Failed to send probe %zu\n", i + 1);
             return EXIT_FAILURE;
         }
-        probes_results[i].probe_sent.tcp = seq_tcp_probes[i];
-        if (i < 5)
+        probes_results[i].status = PROBE_NO_RESPONSE;
+        if (i + 1 < SEQ_PROBE_COUNT)
             nanosleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 100 * 1000000,}, NULL);
     }
 
     // ICMP Echo Packets Sending
     printf("Sending 2 ICMP Echo packets to: %s\n", target_IP);
     for (size_t i = 0; i < NUM_ICMP_PROBES; i++) {
-        probes_results[IE1 + i].status = PROBE_NO_RESPONSE;
         probes_results[IE1 + i].sent_at = (struct timespec){0};
-
+    
         clock_gettime(CLOCK_MONOTONIC, &probes_results[IE1 + i].sent_at);
         if (send_packet(&net, icmp_packets[i], icmp_packet_lens[i], target_IP) != 0) {
             fprintf(stderr, "Failed to send ICMP probe %zu\n", i + 1);
             return EXIT_FAILURE;
         }
-        probes_results[IE1 + i].probe_sent.icmp = icmp_probes[i];
+        probes_results[IE1 + i].status = PROBE_NO_RESPONSE;
+    }
+
+    // ECN TCP Probe + Packet Construction
+    struct tcp_probe ecn_tcp_probe = tcp_ecn_probe_spec(ecn_source_port, atoi(OPEN_PORT), target_IP);
+    size_t ecn_tcp_packet_len = 0;
+    uint8_t *ecn_tcp_packet = construct_TCP_packet(ecn_tcp_probe, src_IP, &ecn_tcp_packet_len);
+    probes_results[ECN].probe_id = ECN;
+    probes_results[ECN].status = PROBE_NOT_SENT;
+    probes_results[ECN].probe_sent.tcp = ecn_tcp_probe;
+    probes_results[ECN].probe_type = TCP_PROBE;
+    if (ecn_tcp_packet == NULL) {
+        fprintf(stderr, "Failed to construct ECN TCP packet\n");
+        return EXIT_FAILURE;
     }
 
     // ECN TCP Packet Sending
     printf("Sending ECN TCP packet to: %s\n", target_IP);
-    probes_results[ECN].status = PROBE_NO_RESPONSE;
     probes_results[ECN].sent_at = (struct timespec){0};
     clock_gettime(CLOCK_MONOTONIC, &probes_results[ECN].sent_at);
     if (send_packet(&net, ecn_tcp_packet, ecn_tcp_packet_len, target_IP) != 0) {
         fprintf(stderr, "Failed to send ECN probe\n");
         return EXIT_FAILURE;
     }
-    probes_results[ECN].probe_sent.tcp = ecn_tcp_probe;
+    probes_results[ECN].status = PROBE_NO_RESPONSE;
 
+    printf("\n");
+
+    // T2-T7 TCP Probes + Packet Construction
+    struct tcp_probe *t2_t7_tcp_probes = tcp_t_probes_spec(t_first_source_port, atoi(OPEN_PORT), atoi(CLOSED_PORT), target_IP);
+    uint8_t *t2_t7_tcp_packets[TX_COUNT] = {0};
+    size_t t2_t7_tcp_packet_len[TX_COUNT] = {0};
+    if (t2_t7_tcp_probes == NULL) {
+        fprintf(stderr, "Failed to create sequence probe specifications\n");
+        return EXIT_FAILURE;
+    }
+
+    for (size_t i = 0; i < TX_COUNT; i++) {
+        probes_results[T2_INDEX + i].probe_id = T2_INDEX + i;
+        probes_results[T2_INDEX + i].status = PROBE_NOT_SENT;
+        probes_results[T2_INDEX + i].probe_sent.tcp = t2_t7_tcp_probes[i];
+        probes_results[T2_INDEX + i].probe_type = TCP_PROBE;
+
+        t2_t7_tcp_packets[i] = construct_TCP_packet(t2_t7_tcp_probes[i], src_IP, &t2_t7_tcp_packet_len[i]);
+        if (t2_t7_tcp_packets[i] == NULL) {
+            fprintf(stderr, "Failed to construct sequence probe %zu\n", i + 1);
+            return EXIT_FAILURE;
+        }
+        printf("Constructed T%zu TCP packet of length: %zu bytes\n", i + 2, t2_t7_tcp_packet_len[i]);
+    }
+
+    // T2-T7 TCP Packet Sending
+    for (size_t i = 0; i < TX_COUNT; i++) {
+        printf("Sending T%zu TCP packet to: %s\n", i + 2, target_IP);
+        probes_results[T2_INDEX + i].sent_at = (struct timespec){0};
+
+        clock_gettime(CLOCK_MONOTONIC, &probes_results[T2_INDEX + i].sent_at);
+        if (send_packet(&net, t2_t7_tcp_packets[i], t2_t7_tcp_packet_len[i], target_IP) != 0) {
+            fprintf(stderr, "Failed to send T%zu probe\n", i + 2);
+            return EXIT_FAILURE;
+        }
+        probes_results[T2_INDEX + i].status = PROBE_NO_RESPONSE;
+    }   
 
 
     printf("\n");
 
+    // Receive and Match Responses
+    struct in_addr source_address;
+    if (inet_pton(AF_INET, src_IP, &source_address) != 1) {
+        fprintf(stderr, "Invalid source IP\n");
+        return EXIT_FAILURE;
+    }
 
-
-    struct parsed_info parsed_res[NUM_PROBES_SENT] = {0};
+    /* Count probes successfully sent and still waiting for a response. */
+    size_t pending_count = 0;
     for (size_t i = 0; i < NUM_PROBES_SENT; i++) {
-        receive_packet(&net, &parsed_res[i]);
-    }    
+        if (probes_results[i].status == PROBE_NO_RESPONSE) {
+            pending_count++;
+        }
+    }
 
-    // for now the number of probes sent and received is the same, 
-    // but this can be changed in the future if needed
-    match_tcp_probes(probes_results, parsed_res, NUM_PROBES_SENT, NUM_PROBES_SENT, (struct in_addr){.s_addr = inet_addr(src_IP)}); 
+    struct timespec started;
+    if (clock_gettime(CLOCK_MONOTONIC, &started) != 0) {
+        perror("clock_gettime");
+        return EXIT_FAILURE;
+    }
 
-    
+    const double receive_timeout_seconds = 3.0;
+    size_t matched_count = 0;
+
+    while (matched_count < pending_count) {
+        // Check the deadline even when unrelated packets keep arriving 
+        struct timespec now;
+        if (clock_gettime(CLOCK_MONOTONIC, &now) != 0) {
+            perror("clock_gettime");
+            return EXIT_FAILURE;
+        }
+
+        double elapsed = ((double)now.tv_sec - (double)started.tv_sec) +
+                        ((double)now.tv_nsec - (double)started.tv_nsec) / 1e9;
+
+        if (elapsed >= receive_timeout_seconds) {
+            break;
+        }
+
+        struct parsed_info response = {0};
+        int status = receive_packet(&net, &response);
+
+        if (status == 0) {
+            // No usable response currently available
+            free_parsed_info(&response);
+            nanosleep(&(struct timespec){.tv_sec = 0, .tv_nsec = 1000000},NULL);
+            continue;
+        }
+
+        if (status < 0) {
+            free_parsed_info(&response);
+            fprintf(stderr, "Receiving stopped with status %d\n", status);
+            return EXIT_FAILURE;
+        }
+
+        int matched = match_tcp_probes(probes_results, &response, NUM_PROBES_SENT, 1, source_address);
+
+        // response is saved in the probes_results if matched, so we can free the 
+        // parsed_info structure here to avoid memory leaks
+        free_parsed_info(&response);
+
+        if (matched < 0) {
+            fprintf(stderr, "Response matching failed\n");
+            return EXIT_FAILURE;
+        }
+
+        matched_count += (size_t)matched;
+    }
+
+    printf("Matched %zu of %zu pending probes\n", matched_count, pending_count);
+
+    for (size_t i = 0; i < NUM_PROBES_SENT; i++) {
+        if (probes_results[i].status == PROBE_NO_RESPONSE) {
+            printf("No response for probe at index %zu\n", i);
+        }
+    }
+    printf("\n");
+
+
+    // Fingerprint Calculation 
     struct os_fingerprint fingerprint = calculate_os_fingerprint(probes_results);
     if (!fingerprint.valid) {
         fprintf(stderr, "Fingerprint calculation failed\n");
         return EXIT_FAILURE;
     }
-
-
 
     return 0;
 }

@@ -1,9 +1,18 @@
 #include "network.h"
 
 
-int network_init(struct network *net, char *interface_name, char *target_ip) {
+int network_init(struct network *net, char *interface_name, char *source_ip, char *target_ip, uint16_t first_tcp_source_port, uint16_t last_tcp_source_port, uint16_t udp_source_port) {
     if (net == NULL) {
         return -1; // Invalid argument
+    }
+    net->send_socket_fd = -1;
+    net->pcap_handle = NULL;
+
+    if (interface_name == NULL || source_ip == NULL ||
+        target_ip == NULL ||
+        first_tcp_source_port > last_tcp_source_port) {
+        fprintf(stderr, "Invalid network_init arguments\n");
+        return -1;
     }
 
     net->send_socket_fd = socket(AF_INET, SOCK_RAW, IPPROTO_RAW);
@@ -17,6 +26,7 @@ int network_init(struct network *net, char *interface_name, char *target_ip) {
     if (setsockopt(net->send_socket_fd, IPPROTO_IP, IP_HDRINCL, &optval, sizeof(optval)) < 0) {
         perror("Failed to set IP_HDRINCL option");
         close(net->send_socket_fd);
+        net->send_socket_fd = -1;
         return -1;
     }
 
@@ -32,8 +42,33 @@ int network_init(struct network *net, char *interface_name, char *target_ip) {
     }
 
     struct bpf_program filter;
-    char filter_expr[128];
-    snprintf(filter_expr, sizeof(filter_expr), "src host %s and (tcp or icmp or udp)", target_ip);
+    char filter_expr[512];
+
+    int written = snprintf(
+        filter_expr, sizeof(filter_expr),
+        "ip and src host %s and dst host %s and "
+        "((tcp and dst portrange %u-%u) or "
+        "(udp and dst port %u) or "
+        "(icmp and (icmp[0] = 0 or "
+        "(icmp[0] = 3 and icmp[1] = 3))))",
+        target_ip,
+        source_ip,
+        (unsigned int)first_tcp_source_port,
+        (unsigned int)last_tcp_source_port,
+        (unsigned int)udp_source_port
+    );
+
+    if (written < 0 || (size_t)written >= sizeof(filter_expr)) {
+        fprintf(stderr, "Capture filter buffer is too small\n");
+        fprintf(stderr, "Capture filter buffer is too small\n");
+
+        pcap_close(net->pcap_handle);
+        net->pcap_handle = NULL;
+
+        close(net->send_socket_fd);
+        net->send_socket_fd = -1;
+        return -1;
+    }
 
     if (pcap_compile(net->pcap_handle, &filter, filter_expr, 1, PCAP_NETMASK_UNKNOWN) == -1) {
         fprintf(stderr, "pcap_compile: %s\n", pcap_geterr(net->pcap_handle));
@@ -60,6 +95,17 @@ int network_init(struct network *net, char *interface_name, char *target_ip) {
     }
 
     pcap_freecode(&filter);
+
+    if (pcap_setnonblock(net->pcap_handle, 1, errbuf) == -1) {
+        fprintf(stderr, "pcap_setnonblock: %s\n", errbuf);
+
+        pcap_close(net->pcap_handle);
+        net->pcap_handle = NULL;
+
+        close(net->send_socket_fd);
+        net->send_socket_fd = -1;
+        return -1;
+    }
 
 
     return 0; // Success
@@ -97,8 +143,15 @@ int send_packet(struct network *net, uint8_t *packet, size_t packet_len, char *t
 }
 
 int receive_packet(struct network *net, struct parsed_info *parsed) {
-    if (net == NULL || net->pcap_handle == NULL)
+    if (net == NULL || net->pcap_handle == NULL || parsed == NULL) {
         return -1;
+    }
+
+    int datalink = pcap_datalink(net->pcap_handle);
+    if (datalink != DLT_EN10MB) {
+        fprintf(stderr, "Unsupported data link type: %d\n", datalink);
+        return -1;
+    }
 
     struct pcap_pkthdr *header;
     const u_char *bytes;
@@ -110,21 +163,5 @@ int receive_packet(struct network *net, struct parsed_info *parsed) {
 
     printf("Captured %u bytes\n", header->caplen);
 
-    if (pcap_datalink(net->pcap_handle) != DLT_EN10MB) {
-        fprintf(stderr, "Unsupported data link type!");
-        return 0;
-    }
-
-    int parse_status = parse_packet(bytes, header, pcap_datalink(net->pcap_handle), parsed);
-    if (parse_status != 1) {
-        return parse_status; // 0 for unsuppoerted, malformed, fragmented or truncated packet, -1 for error
-    }
-
-    // printf("Received packet bytes: \n");
-    // for (size_t i = 0; i < header->caplen; i++) {
-    //     printf("%02X ", (unsigned int)bytes[i]);
-    // }
-    // printf("\n");
-
-    return 1;
+    return parse_packet(bytes, header, pcap_datalink(net->pcap_handle), parsed);
 }

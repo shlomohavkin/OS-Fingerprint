@@ -1,4 +1,5 @@
 #include "fingerprint.h"
+#include "fingerprint_formatter.h"
 
 
 struct seq_samples {
@@ -7,6 +8,8 @@ struct seq_samples {
     uint32_t diffs[SEQ_PROBE_COUNT - 1];
     double rates[SEQ_PROBE_COUNT - 1];
 };
+
+static uint16_t T_hops = UNAVAILABLE_SIG_16; // Global variable to store the number of hops for T test
 
 /* HELPER FUNCTIONS  */
 static uint32_t seq_diff_calc(uint32_t current, uint32_t previous) {
@@ -347,7 +350,7 @@ struct timestamp_fingerprint calculate_timestamp_fingerprint(struct probe_result
         average_ts_inc_sec += (double)diff / elapsed;
     }
     average_ts_inc_sec /= (double)(samples.count - 1);
-    if (!isfinite(average_ts_inc_sec) || average_ts_inc_sec <= 0.0) {
+    if (!isfinite(average_ts_inc_sec) || average_ts_inc_sec < 0.0) {
         return result; 
     }
 
@@ -522,16 +525,23 @@ int calculate_tcp_common_fingerprint(struct probe_result probe, struct tcp_commo
     // W (Window Size) test
     tcp_common_fingerprint->W_test = probe.parsed_response.app_protocol.tcp_ap.win_size;
 
-    // TG (TTL guess) test
-    uint8_t ttl = probe.parsed_response.ip_ttl;
-    if (ttl <= 32) {
-        tcp_common_fingerprint->TG_test = 32;
-    } else if (ttl <= 64) {
-        tcp_common_fingerprint->TG_test = 64;
-    } else if (ttl <= 128) {
-        tcp_common_fingerprint->TG_test = 128;
+
+    // T (TTL) test
+    if (T_hops != UNAVAILABLE_SIG_16) {
+        tcp_common_fingerprint->T_test = (uint16_t)((int)probe.parsed_response.ip_ttl + T_hops);
+        tcp_common_fingerprint->T_present = true;
     } else {
-        tcp_common_fingerprint->TG_test = 255;
+        // TG (TTL guess) test
+        uint8_t ttl = probe.parsed_response.ip_ttl;
+        if (ttl <= 32) {
+            tcp_common_fingerprint->TG_test = 32;
+        } else if (ttl <= 64) {
+            tcp_common_fingerprint->TG_test = 64;
+        } else if (ttl <= 128) {
+            tcp_common_fingerprint->TG_test = 128;
+        } else {
+            tcp_common_fingerprint->TG_test = 255;
+        }
     }
 
     // Q (Quirks) test
@@ -650,24 +660,30 @@ int calculate_ie_fingerprint(struct probe_result probes[2], struct ie_fingerprin
     *ie_fingerprint = (struct ie_fingerprint){0};
 
     
-    
+    // R (Received) test
+    ie_fingerprint->R_test = true; // Initialize R_test to true
     for (size_t i = 0; i < NUM_ICMP_PROBES; i++) {
-        // R (Received) test
-        ie_fingerprint->R_test[i] = probes[i].status == PROBE_RECEIVED;
-        if (!ie_fingerprint->R_test[i]) {
-            return 0; // return 0 to indicate that the R test failed
+        if (probes[i].status != PROBE_RECEIVED) {
+            ie_fingerprint->R_test = false;
+            return 0;
         }
+    }
 
+    // T (TTL) test
+    if (T_hops != UNAVAILABLE_SIG_16) {
+        ie_fingerprint->T_test = (uint16_t)((int)probes[0].parsed_response.ip_ttl + T_hops);
+        ie_fingerprint->T_present = true;
+    } else {
         // TG (TTL guess) test
-        uint8_t ttl = probes[i].parsed_response.ip_ttl;
+        uint8_t ttl = probes[0].parsed_response.ip_ttl;
         if (ttl <= 32) {
-            ie_fingerprint->TG_test[i] = 32;
+            ie_fingerprint->TG_test = 32;
         } else if (ttl <= 64) {
-            ie_fingerprint->TG_test[i] = 64;
+            ie_fingerprint->TG_test = 64;
         } else if (ttl <= 128) {
-            ie_fingerprint->TG_test[i] = 128;
+            ie_fingerprint->TG_test = 128;
         } else {
-            ie_fingerprint->TG_test[i] = 255;
+            ie_fingerprint->TG_test = 255;
         }
     }
 
@@ -743,6 +759,15 @@ int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint
         return -1;
     }
 
+    // Initialize the u1_fingerprint structure
+    *u1_fingerprint = (struct u1_fingerprint){0};
+
+    // R (Received) test
+    u1_fingerprint->R_test = u1_probe.status == PROBE_RECEIVED;
+    if (!u1_fingerprint->R_test) {
+        return 0; // return 0 to indicate that the R test failed
+    }
+
     if (u1_probe.parsed_response.ip_protocol != IPPROTO_ICMP ||
         u1_probe.parsed_response.app_protocol.icmp_ap.type != ICMP_DEST_UNREACH ||
         u1_probe.parsed_response.app_protocol.icmp_ap.code != ICMP_PORT_UNREACH) {
@@ -764,30 +789,8 @@ int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint
 
     const uint8_t *quoted_udp = quoted + quoted_ihl;
 
-
-    // Initialize the u1_fingerprint structure
-    *u1_fingerprint = (struct u1_fingerprint){0};
-
-    // R (Received) test
-    u1_fingerprint->R_test = u1_probe.status == PROBE_RECEIVED;
-    if (!u1_fingerprint->R_test) {
-        return 0; // return 0 to indicate that the R test failed
-    }
-
     // DF (Don't Fragment) test
     u1_fingerprint->DF_test = (u1_probe.parsed_response.ip_fragoff & IP_DF) != 0;
-
-    // TG (TTL guess) test
-    uint8_t ttl = u1_probe.parsed_response.ip_ttl;
-    if (ttl <= 32) {
-        u1_fingerprint->TG_test = 32;
-    } else if (ttl <= 64) {
-        u1_fingerprint->TG_test = 64;
-    } else if (ttl <= 128) {
-        u1_fingerprint->TG_test = 128;
-    } else {
-        u1_fingerprint->TG_test = 255;
-    }
 
     // T (TTL) test
     int hops = (int)u1_probe.probe_sent.udp.ip_ttl - (int)quoted[8];
@@ -795,6 +798,21 @@ int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint
         printf("The target machine is %d hops away.\n", hops);
         u1_fingerprint->T_test = (uint16_t)((int)u1_probe.parsed_response.ip_ttl + hops);
         u1_fingerprint->T_present = true;
+        T_hops = (uint16_t)hops;
+    }
+
+    if (!u1_fingerprint->T_present) {
+        // TG (TTL guess) test
+        uint8_t ttl = u1_probe.parsed_response.ip_ttl;
+        if (ttl <= 32) {
+            u1_fingerprint->TG_test = 32;
+        } else if (ttl <= 64) {
+            u1_fingerprint->TG_test = 64;
+        } else if (ttl <= 128) {
+            u1_fingerprint->TG_test = 128;
+        } else {
+            u1_fingerprint->TG_test = 255;
+        }
     }
 
     // IPL (IP Length) test
@@ -845,9 +863,20 @@ int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint
 
 struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     struct os_fingerprint fingerprint = {0};
+    T_hops = UNAVAILABLE_SIG_16;
+
     if (probes == NULL) {
         return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
     }
+
+
+    // U1 tests 
+    struct probe_result u1_probe;
+    u1_probe = probes[U1];
+    if (calculate_u1_fingerprint(u1_probe, &fingerprint.u1) < 0) {
+        return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
+    }
+
     struct probe_result seq_tcp_probes[SEQ_PROBE_COUNT] = {0};
     for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
         seq_tcp_probes[i] = probes[i];
@@ -912,18 +941,21 @@ struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
         return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
     }
 
-    // U1 tests 
-    struct probe_result u1_probe;
-    u1_probe = probes[U1];
-    if (calculate_u1_fingerprint(u1_probe, &fingerprint.u1) < 0) {
-        return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
-    }
-
-
-
-
-
-
     fingerprint.valid = true;
     return fingerprint;
+}
+
+int generate_fingerprint_string(struct probe_result *probes, char *buffer, size_t capacity) {
+    if (probes == NULL || buffer == NULL || capacity == 0) {
+        return -1;
+    }
+
+    buffer[0] = '\0';
+
+    struct os_fingerprint fingerprint = calculate_os_fingerprint(probes);
+    if (!fingerprint.valid) {
+        return -1;
+    }
+
+    return format_os_fingerprint(&fingerprint, buffer, capacity);
 }

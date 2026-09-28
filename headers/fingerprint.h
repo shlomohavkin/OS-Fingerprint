@@ -14,7 +14,7 @@
 #define OPS_STRING_MAX_LENGTH 128
 #define OPTIONS_MAX_LENGTH 40
 #define UNAVAILABLE_SIG UINT32_MAX
-
+#define UNAVAILABLE_SIG_16 UINT16_MAX
 
 
 enum ip_id_kind {
@@ -72,6 +72,8 @@ struct tcp_common_fingerprint {
     bool DF_test;
 
     uint8_t TG_test;
+    uint16_t T_test;
+    bool T_present;
 
     uint16_t W_test;
     char O_test[OPS_STRING_MAX_LENGTH];
@@ -94,14 +96,13 @@ struct ecn_fingerprint {
 };
 
 struct ie_fingerprint {
-    bool R_test[2];
-    uint8_t TG_test[2];
-
+    bool R_test;
     char DFI_test[2];
 
+    uint8_t TG_test;
+    uint16_t T_test;
+    bool T_present;
 
-    // Only for the first probe
-    // uint8_t T_test; // need U1 test
     char CD_test[3];
 };
 
@@ -146,6 +147,6 @@ struct os_fingerprint {
 
 
 struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes);
-
+int generate_fingerprint_string(struct probe_result *probes, char *buffer, size_t capacity);
 
 #endif 

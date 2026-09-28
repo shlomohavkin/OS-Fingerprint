@@ -423,12 +423,9 @@ int main(int argc, char **argv) {
 
 
     // Fingerprint Calculation 
-    struct os_fingerprint fingerprint = calculate_os_fingerprint(probes_results);
-    if (!fingerprint.valid) {
-        fprintf(stderr, "Fingerprint calculation failed\n");
-        return EXIT_FAILURE;
-    }
-
+    char buffer[1024] = {0};
+    generate_fingerprint_string(probes_results, buffer, sizeof(buffer));
+    printf("Fingerprint string: \n%s\n", buffer);
     return 0;
 }
 

@@ -738,6 +738,111 @@ int calculate_shared_sequence(struct probe_result *seq_probes, struct probe_resu
     return 1;
 }
 
+int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint *u1_fingerprint) {
+    if (u1_fingerprint == NULL) {
+        return -1;
+    }
+
+    if (u1_probe.parsed_response.ip_protocol != IPPROTO_ICMP ||
+        u1_probe.parsed_response.app_protocol.icmp_ap.type != ICMP_DEST_UNREACH ||
+        u1_probe.parsed_response.app_protocol.icmp_ap.code != ICMP_PORT_UNREACH) {
+        return -1;
+    }
+
+    uint8_t *quoted = u1_probe.parsed_response.app_protocol.icmp_ap.payload;
+    size_t quoted_len = u1_probe.parsed_response.app_protocol.icmp_ap.payload_len;
+
+    if (quoted == NULL || quoted_len < 20 || (quoted[0] >> 4) != 4 || quoted[9] != IPPROTO_UDP) {
+        return -1;
+    }
+
+    size_t quoted_ihl = (quoted[0] & 0x0Fu) * 4u;
+    if (quoted_ihl < 20 || quoted_ihl > quoted_len ||
+        quoted_len - quoted_ihl < 8) {
+        return -1;
+    }
+
+    const uint8_t *quoted_udp = quoted + quoted_ihl;
+
+
+    // Initialize the u1_fingerprint structure
+    *u1_fingerprint = (struct u1_fingerprint){0};
+
+    // R (Received) test
+    u1_fingerprint->R_test = u1_probe.status == PROBE_RECEIVED;
+    if (!u1_fingerprint->R_test) {
+        return 0; // return 0 to indicate that the R test failed
+    }
+
+    // DF (Don't Fragment) test
+    u1_fingerprint->DF_test = (u1_probe.parsed_response.ip_fragoff & IP_DF) != 0;
+
+    // TG (TTL guess) test
+    uint8_t ttl = u1_probe.parsed_response.ip_ttl;
+    if (ttl <= 32) {
+        u1_fingerprint->TG_test = 32;
+    } else if (ttl <= 64) {
+        u1_fingerprint->TG_test = 64;
+    } else if (ttl <= 128) {
+        u1_fingerprint->TG_test = 128;
+    } else {
+        u1_fingerprint->TG_test = 255;
+    }
+
+    // T (TTL) test
+    int hops = (int)u1_probe.probe_sent.udp.ip_ttl - (int)quoted[8];
+    if (hops >= 0) {
+        printf("The target machine is %d hops away.\n", hops);
+        u1_fingerprint->T_test = (uint16_t)((int)u1_probe.parsed_response.ip_ttl + hops);
+        u1_fingerprint->T_present = true;
+    }
+
+    // IPL (IP Length) test
+    u1_fingerprint->IPL_test = u1_probe.parsed_response.ip_tot_length;
+
+    // UN (Unused) test
+    u1_fingerprint->UN_test = u1_probe.parsed_response.app_protocol.icmp_ap.header.unreachable.unused;
+
+    // RIPL (Returned Probe IP Length) test
+    uint16_t quoted_ip_tot_length = (quoted[2] << 8) | quoted[3];
+    u1_fingerprint->RIPL_test.is_good = (quoted_ip_tot_length == 0x148); // total length of 328 bytes (0x148) sent in the UDP probe
+    u1_fingerprint->RIPL_test.value = quoted_ip_tot_length;
+   
+    // RID (Returned IP ID) test
+    uint16_t quoted_ip_id = (quoted[4] << 8) | quoted[5];
+    u1_fingerprint->RID_test.is_good = (quoted_ip_id == u1_probe.probe_sent.udp.ip_id); 
+    u1_fingerprint->RID_test.value = quoted_ip_id;
+
+    // RIPCK (Integrity of returned IP Checksum) test
+    uint16_t quoted_ip_checksum = (quoted[10] << 8) | quoted[11];
+    if (quoted_ip_checksum == 0) {
+        u1_fingerprint->RIPCK_test = 'Z'; // Zero checksum
+    } else {
+        u1_fingerprint->RIPCK_test = calculate_checksum(quoted, quoted_ihl) == 0 ? 'G' : 'I'; // G = Good, Z = Zero, I = Invalid
+    }
+
+    // RUCK (Integrity of returned UDP Checksum) test
+    uint16_t quoted_udp_checksum = (quoted_udp[6] << 8) | quoted_udp[7];
+    uint16_t probe_udp_checksum = u1_probe.probe_sent.udp.udp_checksum;
+    u1_fingerprint->RUCK_test.is_good = quoted_udp_checksum == probe_udp_checksum;
+    u1_fingerprint->RUCK_test.value = quoted_udp_checksum;
+
+    // RUD (Integrity of returned UDP Data) test 
+    const uint8_t *quoted_udp_data = quoted_udp + 8; // Skip the UDP header (8 bytes)
+    size_t quoted_udp_data_len = quoted_len - quoted_ihl - 8; // Length of the UDP data in the ICMP payload
+    u1_fingerprint->RUD_test = true; // Initialize to true
+    
+    for (size_t i = 0; i < quoted_udp_data_len; i++) {
+        if (quoted_udp_data[i] != 0x43) { // Check if the byte is not equal to 0x43 ('C')
+            u1_fingerprint->RUD_test = false; // Set to false if any byte does not match
+            break;
+        }
+    }
+
+                                
+    return 1;
+}
+
 struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     struct os_fingerprint fingerprint = {0};
     if (probes == NULL) {
@@ -804,6 +909,13 @@ struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
 
     // SS test
     if (calculate_shared_sequence(seq_tcp_probes, ie_probes, &fingerprint.seq) < 0) {
+        return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
+    }
+
+    // U1 tests 
+    struct probe_result u1_probe;
+    u1_probe = probes[U1];
+    if (calculate_u1_fingerprint(u1_probe, &fingerprint.u1) < 0) {
         return fingerprint; // The valid field will remain false, indicating an invalid fingerprint
     }
 

@@ -105,6 +105,29 @@ struct ie_fingerprint {
     char CD_test[3];
 };
 
+
+struct u1_val {
+    bool is_good;
+    uint16_t value;
+};
+
+struct u1_fingerprint {
+    bool R_test;
+    bool DF_test;
+
+    uint16_t T_test;
+    bool T_present;
+    uint8_t TG_test;
+
+    uint16_t IPL_test;
+    uint32_t UN_test;
+    struct u1_val RIPL_test;
+    struct u1_val RID_test;
+    char RIPCK_test; // G = Good, Z = Zero, I = Invalid
+    struct u1_val RUCK_test; 
+    bool RUD_test;
+};
+
 struct os_fingerprint {
     struct seq_fingerprint seq;       // SEQ test 
     struct ecn_fingerprint ecn;       // ECN
@@ -113,7 +136,7 @@ struct os_fingerprint {
     char ops[SEQ_PROBE_COUNT][OPS_STRING_MAX_LENGTH]; // O1–O6
     uint16_t win[SEQ_PROBE_COUNT];       // W1–W6
 
-    // struct u1_fingerprint u1;         // U1
+    struct u1_fingerprint u1;         // U1
     struct ie_fingerprint ie;         // IE
 
     bool valid; // Indicates if the fingerprint is valid

@@ -136,8 +136,7 @@ int match_tcp_probes(struct probe_result *probe_res, struct parsed_info *parsed_
 }
 
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     srand((unsigned)time(NULL));
 
     if (argc != 3) {
@@ -215,6 +214,7 @@ int main(int argc, char **argv)
         probes_results[IE1 + i].status = PROBE_NOT_SENT;
         probes_results[IE1 + i].probe_sent.icmp = icmp_probes[i];
         probes_results[IE1 + i].probe_type = ICMP_PROBE;
+        printf("Constructed ICMP packet number %zu of length: %zu bytes\n", i + 1, icmp_packet_lens[i]);
     }
 
     printf("\n");
@@ -247,6 +247,8 @@ int main(int argc, char **argv)
         probes_results[IE1 + i].status = PROBE_NO_RESPONSE;
     }
 
+    printf("\n");
+
     // ECN TCP Probe + Packet Construction
     struct tcp_probe ecn_tcp_probe = tcp_ecn_probe_spec(ecn_source_port, atoi(OPEN_PORT), target_IP);
     size_t ecn_tcp_packet_len = 0;
@@ -259,6 +261,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Failed to construct ECN TCP packet\n");
         return EXIT_FAILURE;
     }
+    printf("Constructed ECN TCP packet of length: %zu bytes\n", ecn_tcp_packet_len);
 
     // ECN TCP Packet Sending
     printf("Sending ECN TCP packet to: %s\n", target_IP);
@@ -313,7 +316,9 @@ int main(int argc, char **argv)
     // UDP Probe + Packet Construction
     struct udp_probe udp_probe = udp_probe_spec(udp_source_port, atoi(CLOSED_PORT), target_IP);
     size_t udp_packet_len = 0;
-    uint8_t *udp_packet = construct_UDP_packet(udp_probe, src_IP, &udp_packet_len);
+    uint16_t udp_checksum = 0;
+    uint8_t *udp_packet = construct_UDP_packet(udp_probe, src_IP, &udp_packet_len, &udp_checksum);
+    udp_probe.udp_checksum = udp_checksum;
     probes_results[U1].probe_id = U1;
     probes_results[U1].status = PROBE_NOT_SENT;
     probes_results[U1].probe_sent.udp = udp_probe;

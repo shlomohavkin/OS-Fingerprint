@@ -148,14 +148,14 @@ uint8_t *construct_ICMP_packet(struct icmp_probe icmp_probe_spec, char *source_i
     return packet; // Success
 }
 
-uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, size_t *packet_len) {
-    if (packet_len == NULL) {
+uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, size_t *packet_len, uint16_t *udp_checksum) {
+    if (packet_len == NULL || udp_checksum == NULL) {
         return NULL;
     }
     *packet_len = 0;
+    *udp_checksum = 0;
 
-    if (source_ip == NULL || udp_probe_spec.dest_ip == NULL ||
-        udp_probe_spec.payload_len > 300) {
+    if (source_ip == NULL || udp_probe_spec.dest_ip == NULL || udp_probe_spec.payload_len > 300) {
         fprintf(stderr, "Invalid arguments to construct_UDP_packet\n");
         return NULL;
     }
@@ -177,7 +177,7 @@ uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, 
     ip.tot_len = htons((uint16_t)total_len); // Total length
     ip.id = htons(udp_probe_spec.ip_id);      // Identification
     ip.frag_off = 0;           // Fragment offset
-    ip.ttl = 64;               // Time to Live
+    ip.ttl = udp_probe_spec.ip_ttl;               // Time to Live
     ip.protocol = IPPROTO_UDP; // Protocol (UDP)
     ip.check = 0;              // Checksum (calculated automatically by the kernel)
     if (inet_pton(AF_INET, source_ip, &ip.saddr) != 1 ||
@@ -211,15 +211,19 @@ uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, 
     memcpy(checksum_input + 12, packet + sizeof(ip), udp_len); // UDP header + payload
 
     uint16_t checksum = calculate_checksum(checksum_input, 12 + udp_len);
-    udp.check = htons(checksum == 0 ? 0xFFFFu : checksum);
+    if (checksum == 0) {
+        checksum = 0xFFFFu;
+    }
+    udp.check = htons(checksum);
 
     memcpy(packet + sizeof(ip), &udp, sizeof(udp)); // Update the UDP header with the checksum
 
+    *udp_checksum = checksum;
     *packet_len = total_len; 
     return packet; // Success
 }
 
-uint16_t calculate_checksum(uint8_t *data, size_t len) {
+uint16_t calculate_checksum(const uint8_t *data, size_t len) {
     uint32_t sum = 0;
 
 
@@ -291,7 +295,6 @@ void free_parsed_info(struct parsed_info *parsed) {
         break;
 
     case IPPROTO_UDP:
-        free(parsed->app_protocol.udp_ap.payload);
         break;
     }
 
@@ -396,9 +399,21 @@ static int parse_icmp_response(const uint8_t *icmp, size_t message_len, struct p
         out->app_protocol.icmp_ap.header.echo.id = read_u16(icmp + 4);
         out->app_protocol.icmp_ap.header.echo.seq = read_u16(icmp + 6);
     } else if (icmp[0] == ICMP_DEST_UNREACH) {
-        // Save the unused field as a 32-bit integer in host byte order
-        // This is U1's unused field
         out->app_protocol.icmp_ap.header.unreachable.unused = read_u32(icmp + 4);
+
+        if (message_len - ICMP_HEADER_SIZE < 20) {
+            return 0;
+        }
+
+        const uint8_t *quoted_ip = icmp + ICMP_HEADER_SIZE;
+        size_t quoted_len = message_len - ICMP_HEADER_SIZE;
+        size_t quoted_ihl = (quoted_ip[0] & 0x0Fu) * 4u;
+
+        if ((quoted_ip[0] >> 4) != 4 || quoted_ihl < 20 || quoted_ihl > quoted_len) {
+            return 0;
+        }
+
+        out->app_protocol.icmp_ap.header.unreachable.ip_checksum = read_u16(quoted_ip + 10);
     } else {
         return 0; // Other ICMP message types not implemented here
     }
@@ -413,32 +428,6 @@ static int parse_icmp_response(const uint8_t *icmp, size_t message_len, struct p
     return 1;
 }
 
-static int parse_udp_response(const uint8_t *udp, size_t available_len, struct parsed_info *out) {
-    if (available_len < UDP_HEADER_SIZE) {
-        return 0;
-    }
-
-    uint16_t udp_len = read_u16(udp + 4);
-
-    if (udp_len < UDP_HEADER_SIZE || udp_len > available_len) {
-        return 0;
-    }
-
-    out->app_protocol.udp_ap.src_port = read_u16(udp);
-    out->app_protocol.udp_ap.dst_port = read_u16(udp + 2);
-    out->app_protocol.udp_ap.length = udp_len;
-    out->app_protocol.udp_ap.checksum = read_u16(udp + 6);
-
-    size_t payload_len = (size_t)udp_len - UDP_HEADER_SIZE;
-    out->app_protocol.udp_ap.payload_len = payload_len;
-
-    if (copy_bytes(&out->app_protocol.udp_ap.payload,
-                   udp + UDP_HEADER_SIZE, payload_len) < 0) {
-        return -1;
-    }
-
-    return 1;
-} 
 
 int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int datalink, struct parsed_info *parsed) {
     if (parsed == NULL) {

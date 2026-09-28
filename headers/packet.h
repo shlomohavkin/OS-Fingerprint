@@ -63,22 +63,13 @@ struct parsed_info {
 
                 struct {
                     uint32_t unused;
+                    uint16_t ip_checksum; // Checksum of the quoted IP header in ICMP payload
                 } unreachable;
             } header;
 
             uint8_t *payload;
             size_t payload_len;
         } icmp_ap;
-
-        struct udp_u {
-            uint16_t src_port;
-            uint16_t dst_port;
-            uint16_t length; // UDP header + UDP payload
-            uint16_t checksum;
-
-            uint8_t *payload;
-            size_t payload_len;
-        } udp_ap;
     }app_protocol;
 };
 
@@ -87,8 +78,8 @@ struct parsed_info {
 
 uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, size_t *packet_len);
 uint8_t *construct_ICMP_packet(struct icmp_probe icmp_probe_spec, char *source_ip, size_t *packet_len);
-uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, size_t *packet_len);
-uint16_t calculate_checksum(uint8_t *data, size_t len);
+uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, size_t *packet_len, uint16_t *udp_checksum);
+uint16_t calculate_checksum(const uint8_t *data, size_t len);
 
 
 int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int datalink, struct parsed_info *parsed);

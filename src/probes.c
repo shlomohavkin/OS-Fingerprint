@@ -207,7 +207,7 @@ struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, ch
             TCPOPT_NOP, // NOP
             TCPOPT_NOP, // NOP
         },
-        .tcp_options_len = 20
+        .tcp_options_len = 12
     };
 
     return tcp_probe;
@@ -299,7 +299,7 @@ struct tcp_probe *tcp_t_probes_spec(uint16_t source_port, uint16_t open_port, ui
         .window_size = 31337,
         .urgent_pointer = 0,
         .reseved_bit = false,
-        .ip_DF = true,
+        .ip_DF = false,
         .tcp_options = {
             TCPOPT_WINDOW, TCPOLEN_WINDOW, 0x0A, // winow scale = 10
             TCPOPT_NOP, // NOP
@@ -367,6 +367,7 @@ struct udp_probe udp_probe_spec(uint16_t source_port, uint16_t dest_port, char *
         .source_port = source_port,
         .dest_port = dest_port,
         .ip_id = 0x1042,
+        .ip_ttl = 64,
     };
 
     memset(udp_probe.payload, 'C', sizeof(udp_probe.payload));

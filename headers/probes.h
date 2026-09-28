@@ -47,6 +47,8 @@ struct udp_probe {
     uint16_t source_port;
     uint16_t dest_port;
     uint16_t ip_id;
+    uint8_t ip_ttl;
+    uint16_t udp_checksum;
 
     uint8_t payload[300];
     size_t payload_len;

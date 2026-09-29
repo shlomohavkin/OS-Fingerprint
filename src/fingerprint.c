@@ -610,6 +610,11 @@ int calculate_t_tests(struct probe_result probe, struct tcp_fingerprint *tcp_fin
     if (flags & TH_FIN) strcat(tcp_fingerprint->F_test, "F");
 
     // RD (RST Data) test
+    /* Interesting finding when comparing nmap and our results, is nmap includes the six zero 
+     * Ethernet padding bytes in the calculation of the RD test, which is not part of the TCP payload. 
+     * This can lead to different RD test results between nmap and our implementation.
+     * I chose to follow the specification described in the Nmap site. 
+     */
     size_t payload_len = probe.parsed_response.app_protocol.tcp_ap.payload_len;
     if ((flags & TH_RST) && payload_len > 0) {
         const uint8_t *payload = probe.parsed_response.app_protocol.tcp_ap.payload;

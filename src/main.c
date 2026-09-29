@@ -423,9 +423,9 @@ int main(int argc, char **argv) {
 
 
     // Fingerprint Calculation 
-    char buffer[1024] = {0};
-    generate_fingerprint_string(probes_results, buffer, sizeof(buffer));
-    printf("Fingerprint string: \n%s\n", buffer);
+    char fingerprint[1024] = {0};
+    generate_fingerprint_string(probes_results, fingerprint, sizeof(fingerprint));
+    printf("Fingerprint string: \n%s\n", fingerprint);
     return 0;
 }
 

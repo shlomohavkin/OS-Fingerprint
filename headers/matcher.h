@@ -1,6 +1,9 @@
 #ifndef MATCHER_H
 #define MATCHER_H
 
+#include "fingerprint.h"
+#include "database.h"
+
 
 
 

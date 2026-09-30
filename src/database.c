@@ -8,6 +8,10 @@
     } while (0)
 
 
+
+/**
+ * Function to free the memory allocated for a fingerprint group.
+ */
 void free_fingerprint_group(struct fingerprint_group *group) {
     if (group == NULL) {
         return;
@@ -24,6 +28,9 @@ void free_fingerprint_group(struct fingerprint_group *group) {
     *group = (struct fingerprint_group){0};
 }
 
+/**
+ * Function to free the memory allocated for a match fingerprint.
+ */
 void free_match_fingerprint(struct match_fingerprint *fingerprint) {
     if (fingerprint == NULL) {
         return;
@@ -38,6 +45,9 @@ void free_match_fingerprint(struct match_fingerprint *fingerprint) {
     *fingerprint = (struct match_fingerprint){0};
 }
 
+/**
+ * Function to free the memory allocated for a database entry.
+ */
 void free_database_entry(struct database_entry *entry) {
     if (entry == NULL) {
         return;
@@ -49,6 +59,9 @@ void free_database_entry(struct database_entry *entry) {
     *entry = (struct database_entry){0};
 }
 
+/**
+ * Function to free the memory allocated for match weights.
+ */
 void free_match_weights(struct match_weights *weights) {
     if (weights == NULL) {
         return;
@@ -64,6 +77,12 @@ void free_match_weights(struct match_weights *weights) {
 }
 
 
+
+/**
+ * Function to parse a fingerprint group from a line of text, 
+ * and populate the provided fingerprint_group structure.
+ * @return 0 on success, -1 on error.
+ */
 int parse_fingerprint_group(const char *line, struct fingerprint_group *out) {
     if (line == NULL || out == NULL) {
         return -1;
@@ -208,6 +227,11 @@ int parse_fingerprint_group(const char *line, struct fingerprint_group *out) {
     return 0;
 }
 
+/**
+ * Function to parse an observed fingerprint from a string, 
+ * and populate the provided match_fingerprint structure.
+ * @return 0 on success, -1 on error.
+ */
 int parse_observed_fingerprint(const char *text, struct match_fingerprint *out) {
     if (text == NULL || out == NULL) {
         return -1;
@@ -269,6 +293,10 @@ int parse_observed_fingerprint(const char *text, struct match_fingerprint *out) 
     return 0;
 }
 
+/**
+ * Adds the weights from a fingerprint group to the match_weights structure.
+ * @return 0 on success, -1 on error.
+ */
 static int add_group_weights(const struct fingerprint_group *group, struct match_weights *out) {
     for (size_t i = 0; i < group->field_count; i++) {
         const struct fingerprint_field *field = &group->fields[i];
@@ -326,11 +354,14 @@ static int add_group_weights(const struct fingerprint_group *group, struct match
     return 0;
 }
 
-/** Read the MatchPoints section.
-   * @param file The file to read from.
-   * @param out The struct to store the read weights in.
-   * @return 0 on success, -1 on failure. */ 
-   // need to rewind the file ptr before after calling this fuction
+/**
+ * Reads the MatchPoints section from the database file and populates the match_weights structure.
+ * This function is one of the two function that are used in the matcher.c file to read the databse file
+ * and extract the match weights for each group and field. The other function is read_next_reference.
+ * @param file The database file to read from.
+ * @param out The match_weights structure to populate.
+ * @return 0 on success, -1 on error.
+ */
 int read_match_weights(FILE *file, struct match_weights *out) {
     if (file == NULL || out == NULL) {
         return -1;
@@ -411,8 +442,14 @@ int read_match_weights(FILE *file, struct match_weights *out) {
 }
 
 
-/* Read one complete reference fingerprint.
-   Returns 1 on success, 0 at EOF, -1 on failure. */
+/**
+ * Reads the next reference fingerprint from the database file and populates the database_entry structure.
+ * This is the second function that is used in the matcher.c file to read the databse file and 
+ * extract the reference fingerprints for each OS.
+ * @param file The database file to read from.
+ * @param out The database_entry structure to populate.
+ * @return 1 if an entry was read, 0 if EOF was reached, -1 on error.
+ */
 int read_next_reference(FILE *file, struct database_entry *out) {
     if (file == NULL || out == NULL) {
         return -1;

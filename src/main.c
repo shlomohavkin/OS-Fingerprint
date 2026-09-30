@@ -30,6 +30,8 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    // Fill the scan configuration with the provided arguments and default values
+    // for the current scan.
     struct scan_config config = {
         .target_ip = argv[1],
         .source_ip = "172.25.0.230",
@@ -58,16 +60,20 @@ int main(int argc, char **argv) {
     struct os_match best_matches[MAX_MATCHES] = {0};
     size_t match_count = 0;
 
+    // Initialize the network to be ready to send and receive packets.
     if (open_scan_network(&net, &config) != 0)
         goto cleanup;
     network_ready = true;
 
+    // Prepare the probes specifications and construct the packets to be sent.
     if (prepare_probes(&scan, &config) < 0)
         goto cleanup;
 
+    // Send the probes to the target ip.
     if (send_probes(&net, &scan, &config) < 0)
         goto cleanup;
 
+    // Collect the responses to the sent probes and match them to the sent probes.
     if (collect_responses(&net, &scan, &config) < 0)
         goto cleanup;
 

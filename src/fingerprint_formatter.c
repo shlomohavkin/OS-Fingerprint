@@ -1,6 +1,13 @@
 #include "fingerprint_formatter.h"
 
-
+/**
+ * Useful helper function to append formatted text to a buffer while keeping track of the used space.
+ * @param buffer The buffer to which the formatted text will be appended.
+ * @param capacity The total capacity of the buffer.
+ * @param used A pointer to the variable that keeps track of the used space in the buffer.
+ * @param format The format string (like printf).
+ * @return 0 on success, -1 on error (e.g., if the buffer is too small to hold the formatted text).
+ */
 static int append_text(char *buffer, size_t capacity, size_t *used, const char *format,...) {
     if (*used >= capacity) {
         return -1;
@@ -21,8 +28,11 @@ static int append_text(char *buffer, size_t capacity, size_t *used, const char *
     return 0;
 }
 
-static void format_u1_value(struct u1_val value, char text[5])
-{
+/**
+ * Helper function to format the U1 test value into a string representation,
+ * and save it in the provided buffer.
+ */
+static void format_u1_value(struct u1_val value, char text[5]) {
     if (value.is_good) {
         strcpy(text, "G");
     } else {
@@ -30,6 +40,10 @@ static void format_u1_value(struct u1_val value, char text[5])
     }
 }
 
+/**
+ * Helper function to format the IP ID test value into a string representation, 
+ * and save it in the provided buffer.
+ */
 static int format_ip_id_value(const struct ip_id_fingerprint *id, char text[5]) {
     switch (id->kind) {
     case IP_ID_UNAVAILABLE:
@@ -69,7 +83,14 @@ static int format_ip_id_value(const struct ip_id_fingerprint *id, char text[5]) 
     return 1;
 }
 
-
+/**
+ * Helper function to format the SEQ test values into a string representation.
+ * @param fingerprint The OS fingerprint containing the SEQ test values.
+ * @param buffer The buffer where the formatted string will be stored.
+ * @param capacity The total capacity of the buffer.
+ * @param used A pointer to the variable that keeps track of the used space in the buffer.
+ * @return 0 on success, -1 on error (e.g., if the buffer is too small to hold the formatted text).
+ */
 static int format_seq(const struct os_fingerprint *fingerprint, char *buffer, size_t capacity, size_t *used) {
     if (fingerprint == NULL || buffer == NULL ||
         capacity == 0 || used == NULL || *used >= capacity) {
@@ -167,6 +188,10 @@ static int format_seq(const struct os_fingerprint *fingerprint, char *buffer, si
     return 0; // No available fields: omit the entire SEQ line.
 }
 
+/**
+ * Helper function to format the OPS test values into a string representation.
+ * @return 0 on success, -1 on error (e.g., if the buffer is too small to hold the formatted text).
+ */
 static int format_ops(const struct os_fingerprint *fingerprint, char *buffer, size_t capacity, size_t *used) {
     bool first = true;
 
@@ -188,6 +213,10 @@ static int format_ops(const struct os_fingerprint *fingerprint, char *buffer, si
     return 0; // No available window results: omit OPS.
 }
 
+/**
+ * Helper function to format the WIN test values into a string representation.
+ * @return 0 on success, -1 on error (e.g., if the buffer is too small to hold the formatted text).
+ */
 static int format_win(const struct os_fingerprint *fingerprint, char *buffer, size_t capacity, size_t *used) {
     bool first = true;
 
@@ -209,6 +238,10 @@ static int format_win(const struct os_fingerprint *fingerprint, char *buffer, si
     return 0; // No available window results: omit WIN.
 }
 
+/**
+ * Helper function to format the T1–T7 test values into a string representation.
+ * @return 0 on success, -1 on error (e.g., if the buffer is too small to hold the formatted text).
+ */
 static int format_t1_7(const struct os_fingerprint *fingerprint, char *buffer, size_t capacity, size_t *used) {
     for (size_t i = 0; i < TX_COUNT + 1; i++) {
         const struct tcp_fingerprint *tcp = &fingerprint->tcp[i];
@@ -258,6 +291,10 @@ static int format_t1_7(const struct os_fingerprint *fingerprint, char *buffer, s
     return 0;
 }
 
+/**
+ * Helper function to format the ECN test values into a string representation.
+ * @return 0 on success, -1 on error (e.g., if the buffer is too small to hold the formatted text).
+ */
 static int format_ecn(const struct os_fingerprint *fingerprint, char *buffer, size_t capacity, size_t *used) {
     const struct ecn_fingerprint *ecn = &fingerprint->ecn;
     const struct tcp_common_fingerprint *common = &ecn->common;
@@ -277,6 +314,10 @@ static int format_ecn(const struct os_fingerprint *fingerprint, char *buffer, si
                         common->Q_test);
 }
 
+/**
+ * Helper function to format the IE test values into a string representation.
+ * @return 0 on success, -1 on error (e.g., if the buffer is too small to hold the formatted text).
+ */
 static int format_ie(const struct os_fingerprint *fingerprint, char *buffer, size_t capacity, size_t *used) {
     const struct ie_fingerprint *ie = &fingerprint->ie;
 
@@ -295,6 +336,10 @@ static int format_ie(const struct os_fingerprint *fingerprint, char *buffer, siz
     return 0;
 }
 
+/**
+ * Helper function to format the U1 test values into a string representation.
+ * @return 0 on success, -1 on error (e.g., if the buffer is too small to hold the formatted text).
+ */
 static int format_u1(const struct os_fingerprint *fingerprint, char *buffer, size_t capacity, size_t *used) {
     const struct u1_fingerprint *u1 = &fingerprint->u1;
 
@@ -323,6 +368,13 @@ static int format_u1(const struct os_fingerprint *fingerprint, char *buffer, siz
 }
 
 
+/**
+ * Main function to format the OS fingerprint into a string representation.
+ * @param fingerprint The OS fingerprint to format.
+ * @param buffer The buffer where the formatted string will be stored.
+ * @return The number of characters written to the buffer (excluding the null terminator) 
+ * if successful, or -1 on error (e.g., if the buffer is too small to hold the 
+ */
 int format_os_fingerprint(const struct os_fingerprint *fingerprint, char *buffer, size_t capacity) {
     if (fingerprint == NULL || buffer == NULL || capacity == 0) {
         return -1;

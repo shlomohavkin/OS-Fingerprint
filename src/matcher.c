@@ -1,7 +1,9 @@
 #include "matcher.h"
 
-// heper function to parse a hex value from a string. Returns 0 on success, -1 on failureint parse_hex_value(const char *text, uint32_t *out);
-
+/**
+ * Finds a group in a fingerprint by its name.
+ * @return A pointer to the found group, or NULL if not found.
+ */
 const struct fingerprint_group *find_group(const struct match_fingerprint *fingerprint, const char *group_name) {
     if (fingerprint == NULL || group_name == NULL) {
         return NULL;
@@ -15,6 +17,10 @@ const struct fingerprint_group *find_group(const struct match_fingerprint *finge
     return NULL;
 }
 
+/**
+ * Finds a field in a fingerprint group by its name.
+ * @return A pointer to the found field, or NULL if not found.
+ */
 const struct fingerprint_field *find_field(const struct fingerprint_group *group, const char *field_name) {
     if (group == NULL || field_name == NULL) {
         return NULL;
@@ -27,12 +33,16 @@ const struct fingerprint_field *find_field(const struct fingerprint_group *group
     }
     return NULL;
 }
+
 /**
  * Finds the match weight for a given group and field name.
- * Returns 1 if found, 0 if not found, and -1 on error.
+ * @param weights The match weights to search in.
+ * @param group_name The name of the group to find.
+ * @param field_name The name of the field to find.
+ * @param points A pointer to store the found points.
+ * @return 1 if found, 0 if not found, and -1 on error.
  */
-static int find_match_weight(const struct match_weights *weights, const char *group_name,
-                            const char *field_name, unsigned int *points) {
+static int find_match_weight(const struct match_weights *weights, const char *group_name, const char *field_name, unsigned int *points) {
     if (weights == NULL || group_name == NULL || field_name == NULL || points == NULL) {
         return -1;
     }
@@ -47,7 +57,11 @@ static int find_match_weight(const struct match_weights *weights, const char *gr
     return 0;
 }
 
-/* Convert one hexadecimal digit. */
+/**
+ * Function that checks if a given char is a valid hexadecimal digit.
+ * @param c The character to check.
+ * @return the hexadecimal value of the character, or -1 if it's not a valid hexadecimal digit.
+ */
 static int hex_digit(unsigned char c) {
     if (c >= '0' && c <= '9') {
         return c - '0';
@@ -63,8 +77,8 @@ static int hex_digit(unsigned char c) {
 
 /**
  * Parse a hexadecimal substring without requiring a terminating '\0'.
- * Returns 0 on success, -1 on invalid input or overflow. 
-*/
+ * Returns 0 on success, -1 on invalid input or overflow.
+ */
 static int parse_hex_slice(const char *text, size_t length, uint32_t *out) {
     if (length == 0) {
         return -1;
@@ -85,8 +99,10 @@ static int parse_hex_slice(const char *text, size_t length, uint32_t *out) {
     return 0;
 }
 
-
+/* This is the signature of the main function that is called recursively. */
 int match_expression_slice( const char *observed, size_t observed_len, const char *expression, size_t expression_len, bool tcp_options);
+
+
 /**
  * Helper function that checks a match between an observed value and a reference expression slices. 
  * Which is called recursively by match_expression_slice. 
@@ -202,8 +218,9 @@ static int match_helper(const char *observed, size_t observed_len, const char *e
 }
 
 /**
- * The function gets the expressions between the '|' characters and calls match_helper for each expression.
- * If any of the expressions match, it returns 1. If none match, it returns 0. If any expression is invalid, it returns -1.
+ * The function finds the expressions between the '|' characters and calls match_helper for each 
+ * expression, to check whether there is a match. If any of the expressions match, it returns 1. 
+ * If none match, it returns 0. If any expression is invalid, it returns -1.
  */
 int match_expression_slice( const char *observed, size_t observed_len, const char *expression, size_t expression_len, bool tcp_options) {
     size_t start = 0;
@@ -259,6 +276,10 @@ int match_expression_slice( const char *observed, size_t observed_len, const cha
     return matched ? 1 : 0;
 }
 
+/**
+ * The main function that calls the recursive match_expression_slice function. 
+ * It checks for NULL pointers and returns -1 for invalid input.
+ */
 int match_expression(const char *observed, const char *expression, bool tcp_options) {
     if (observed == NULL || expression == NULL) {
         return -1;
@@ -413,6 +434,12 @@ static int retain_best_match(struct os_match *best_matches, size_t *match_count,
     return 0;
 }
 
+/**
+ * The main function that is called to find the best OS matches based on 
+ * the observed fingerprint and the reference database. This function reads the database, 
+ * compares the fingerprints, and retains the best matches.
+ * @return 0 on success, -1 on error.
+ */
 int find_os_matches(const char *database_path, const char *observed_fingerprint_string, struct os_match *best_matches, const size_t max_matches, size_t *match_count) {
     if (database_path == NULL || observed_fingerprint_string == NULL || best_matches == NULL || match_count == NULL) {
         return -1;
@@ -501,7 +528,9 @@ int find_os_matches(const char *database_path, const char *observed_fingerprint_
     return 0;
 }
 
-
+/**
+ * Function to free the memory allocated for the best_matches array.
+ */
 void free_os_matches(struct os_match *matches, size_t match_count) {
     if (matches == NULL) {
         return;

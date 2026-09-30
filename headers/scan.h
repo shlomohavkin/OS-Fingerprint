@@ -27,14 +27,14 @@ struct scan_state {
     struct probe_packet packets[NUM_PROBES_SENT];
 };
 
-/* Initialize scan_state to zero before preparation. Free it after any outcome. */
+
+
 int prepare_probes(struct scan_state *scan, const struct scan_config *config);
 int open_scan_network(struct network *net, const struct scan_config *config);
-int send_probes(struct network *net, struct scan_state *scan,
-                const struct scan_config *config);
-/* Returns the number matched, or -1 on error. */
-int collect_responses(struct network *net, struct scan_state *scan,
-                      const struct scan_config *config);
+int send_probes(struct network *net, struct scan_state *scan,const struct scan_config *config);
+
+
+int collect_responses(struct network *net, struct scan_state *scan, const struct scan_config *config);
 void free_scan(struct scan_state *scan);
 
 #endif

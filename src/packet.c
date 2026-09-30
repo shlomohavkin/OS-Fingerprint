@@ -6,7 +6,13 @@
 #define UDP_HEADER_SIZE       8
 #define ICMP_HEADER_SIZE      8
 
-
+/**
+ * Constructs a raw TCP packet based on the provided TCP probe specifications and source IP address.
+ * @param tcp_probe_spec The specifications for the TCP probe, 
+ * including source/destination ports, sequence numbers, flags, 
+ * window size, and TCP options. Which are created in the probe.c file.
+ * @return A pointer to the constructed raw TCP packet, or NULL on failure. 
+ */
 uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, size_t *packet_len) {
     if (packet_len == NULL) {
         return NULL;
@@ -89,6 +95,12 @@ uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, 
     return packet; // Success
 }
 
+/**
+ * Constructs a raw ICMP packet based on the provided ICMP probe specifications and source IP address.
+ * @param icmp_probe_spec The specifications for the ICMP probe, including destination IP, ICMP type/code, 
+ * identifier/sequence, and payload.
+ * @return A pointer to the constructed raw ICMP packet, or NULL on failure. 
+ */
 uint8_t *construct_ICMP_packet(struct icmp_probe icmp_probe_spec, char *source_ip, size_t *packet_len) {
     if (source_ip == NULL || packet_len == NULL ) {
         return NULL; // Invalid arguments
@@ -148,6 +160,13 @@ uint8_t *construct_ICMP_packet(struct icmp_probe icmp_probe_spec, char *source_i
     return packet; // Success
 }
 
+/**
+ * Constructs a raw UDP packet based on the provided UDP probe specifications and source IP address.
+ * @param udp_probe_spec The specifications for the UDP probe, including source/destination ports, IP ID, TTL, and payload.
+ * @param udp_checksum Pointer to a uint16_t variable where the calculated UDP checksum will be stored. This is done because
+ * the UDP checksum is needed in the calculation of the fingerprint and is not stored in the UDP probe saved in the probe_result structure.
+ * @return A pointer to the constructed raw UDP packet, or NULL on failure.
+ */
 uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, size_t *packet_len, uint16_t *udp_checksum) {
     if (packet_len == NULL || udp_checksum == NULL) {
         return NULL;
@@ -223,6 +242,10 @@ uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, 
     return packet; // Success
 }
 
+/**
+ * Function to calculate the checksum of a given data buffer. 
+ * The fucntion is used to calculate the checksum for TCP, UDP, and ICMP packets.
+ */
 uint16_t calculate_checksum(const uint8_t *data, size_t len) {
     uint32_t sum = 0;
 
@@ -252,11 +275,16 @@ uint16_t calculate_checksum(const uint8_t *data, size_t len) {
     return (uint16_t)~sum; // Return one's complement
 }
 
-/* Read network-order bytes and return host-order integers. */
+/**
+ * Function to read a 16-bit unsigned integer from a byte array in network byte order.
+ */
 static uint16_t read_u16(const uint8_t *p) {
     return (uint16_t)(((uint16_t)p[0] << 8) | p[1]);
 }
 
+/**
+ * Function to read a 32-bit unsigned integer from a byte array in network byte order.
+ */
 static uint32_t read_u32(const uint8_t *p) {
     return ((uint32_t)p[0] << 24) |
            ((uint32_t)p[1] << 16) |
@@ -264,6 +292,9 @@ static uint32_t read_u32(const uint8_t *p) {
            (uint32_t)p[3];
 }
 
+/**
+ * Function to copy a specified number of bytes from a source buffer to a destination buffer.
+ */
 static int copy_bytes(uint8_t **destination, const uint8_t *source, size_t length) {
     *destination = NULL;
     if (length == 0) {
@@ -279,6 +310,10 @@ static int copy_bytes(uint8_t **destination, const uint8_t *source, size_t lengt
     return 1;
 }
 
+/**
+ * Function to free the memory allocated for a parsed_info structure, 
+ * including any dynamically allocated fields within it.
+ */
 void free_parsed_info(struct parsed_info *parsed) {
     if (parsed == NULL) {
         return;
@@ -301,6 +336,9 @@ void free_parsed_info(struct parsed_info *parsed) {
     *parsed = (struct parsed_info){0};
 }
 
+/**
+ * Function to parse a TCP response packet and extract relevant information into a parsed_info structure.
+ */
 static int parse_tcp_response(const uint8_t *tcp, size_t segment_len, struct parsed_info *out) {
     if (segment_len < TCP_HEADER_SIZE) {
         return 0;
@@ -386,6 +424,9 @@ static int parse_tcp_response(const uint8_t *tcp, size_t segment_len, struct par
     return 1;
 }
 
+/**
+ * Function to parse an ICMP response packet and extract relevant information into a parsed_info structure.
+ */
 static int parse_icmp_response(const uint8_t *icmp, size_t message_len, struct parsed_info *out) {
     if (message_len < ICMP_HEADER_SIZE) {
         return 0;
@@ -428,7 +469,10 @@ static int parse_icmp_response(const uint8_t *icmp, size_t message_len, struct p
     return 1;
 }
 
-
+/**
+ * Main function to parse a network packet and extract relevant information into a parsed_info structure.
+ * This function handles fields from Ethernet,IPv4, TCP, UDP, and ICMP protocols.
+ */
 int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int datalink, struct parsed_info *parsed) {
     if (parsed == NULL) {
         return -1;
@@ -516,6 +560,9 @@ int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int data
     return 1;
 }
 
+/**
+ * Function used for debugging purposes to print the parsed packet information in a human-readable format.
+ */
 void print_test(struct parsed_info parsed_res) {
     printf("Parsed TCP Packet Information:\n");
     printf("Source IP: %s\n", inet_ntoa(parsed_res.src_ip));

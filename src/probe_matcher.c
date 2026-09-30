@@ -1,5 +1,10 @@
 #include "probe_matcher.h"
 
+/**
+ * Helper function to check if a received ICMP response matches the sent UDP probe to the closed port.
+ * It verifies that the quoted IP header and UDP header in the ICMP payload match the specifications of the sent UDP probe.
+ * @return true if the response matches the probe, false otherwise.
+ */
 static bool matches_quoted_udp(const struct udp_probe *probe, const uint8_t *ip, size_t len, struct in_addr source_ip, struct in_addr target_ip) {
     if (ip == NULL || len < 20 ||
         (ip[0] >> 4) != 4 || ip[9] != IPPROTO_UDP) {
@@ -26,10 +31,13 @@ static bool matches_quoted_udp(const struct udp_probe *probe, const uint8_t *ip,
     uint16_t src_port = ((uint16_t)udp[0] << 8) | udp[1];
     uint16_t dst_port = ((uint16_t)udp[2] << 8) | udp[3];
 
-    return src_port == probe->source_port &&
-           dst_port == probe->dest_port;
+    return src_port == probe->source_port && dst_port == probe->dest_port;
 }
 
+/**
+ * Function to check if a received response matches the sent probe based on the probe type and its specifications.
+ * @return true if the response matches the probe, false otherwise.
+ */
 static bool response_matches_probe(const struct probe_result *probe, const struct parsed_info *response, struct in_addr source_ip) {
     struct in_addr target_ip;
     const char *target;
@@ -86,7 +94,11 @@ static bool response_matches_probe(const struct probe_result *probe, const struc
     }
 }
 
-
+/**
+ * Matches the received responses to the sent probes based on their specifications.
+ * Updates the probe_result structures with the parsed responses and their statuses.
+ * @return The number of matched responses, or -1 on failure.
+ */
 int match_probe_responses(struct probe_result *probe_res, struct parsed_info *parsed_res, size_t probe_count, size_t response_count, struct in_addr source_ip) {
     if ((probe_res == NULL && probe_count != 0) ||
         (parsed_res == NULL && response_count != 0)) {

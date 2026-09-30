@@ -9,20 +9,35 @@ struct seq_samples {
     double rates[SEQ_PROBE_COUNT - 1];
 };
 
+enum ip_id_test_type {
+    IP_ID_TEST_TI,
+    IP_ID_TEST_CI,
+    IP_ID_TEST_II
+};
+
 static uint16_t T_hops = UNAVAILABLE_SIG_16; // Global variable to store the number of hops for T test
 
 /* HELPER FUNCTIONS  */
+/**
+ * Fucntion to calculate the difference between two TCP sequence numbers, considering wrap-around.
+ */
 static uint32_t seq_diff_calc(uint32_t current, uint32_t previous) {
     uint32_t forward = (uint32_t)(current - previous);
     uint32_t backward = (uint32_t)(previous - current);
     return forward < backward ? forward : backward;
 }
 
+/**
+ * Function to calculate the elapsed time in seconds between two timespec structures.
+ */
 static double elapsed_seconds(struct timespec previous, struct timespec next) {
     return ((double)next.tv_sec - (double)previous.tv_sec) +
            ((double)next.tv_nsec - (double)previous.tv_nsec) / 1e9;
 }
 
+/**
+ * Function to find the indices of the successful responses to the sequence TCP probes.
+ */
 static struct seq_samples find_seq_samples(const struct probe_result *probes) {
     struct seq_samples samples = {0};
     if (probes == NULL) {
@@ -41,6 +56,10 @@ static struct seq_samples find_seq_samples(const struct probe_result *probes) {
     return samples;
 }
 
+/**
+ * Function to calculate the differences and rates of the sequence numbers for the successful 
+ * responses to the sequence TCP probes. Those arrays are used to calculate the GCD, ISR, and SP tests.
+ */
 static bool calculate_diffs_and_rates(const struct probe_result *probes, struct seq_samples *samples) {
     if (samples->count < 2) {
         return false;
@@ -62,6 +81,9 @@ static bool calculate_diffs_and_rates(const struct probe_result *probes, struct 
     return true;
 }
 
+/**
+ * Function to calculate the greatest common divisor (GCD) of two numbers using the Euclidean algorithm.
+ */
 uint32_t gcd(uint32_t a, uint32_t b) {
     while (b != 0) {
         uint32_t remainder = a % b;
@@ -71,6 +93,10 @@ uint32_t gcd(uint32_t a, uint32_t b) {
     return a;
 }
 
+/**
+ * Function to calculate the GCD of an array of numbers.
+ * Returns UNAVAILABLE_SIG if the array is NULL or has zero length.
+ */
 uint32_t gcd_array(uint32_t *arr, size_t len) {
     if (arr == NULL || len == 0) {
         return UNAVAILABLE_SIG;
@@ -85,6 +111,10 @@ uint32_t gcd_array(uint32_t *arr, size_t len) {
     return result;
 }
 
+/**
+ * Function to calculate the standard deviation of an array of doubles.
+ * Returns NAN if the array is NULL or has less than 2 elements.
+ */
 double standard_deviation(const double *arr, size_t len) {
     if (arr == NULL || len < 2) {
         return NAN;
@@ -106,6 +136,10 @@ double standard_deviation(const double *arr, size_t len) {
 
 
 /* TEST CALCULATION FUNCTIONS */
+/**
+ * Function to calculate the GCD test value from the sequence TCP probes.
+ * Returns UNAVAILABLE_SIG if there are not enough valid samples or if the calculation fails.
+ */
 uint32_t calculate_gcd_test(struct probe_result *probes) {
     struct seq_samples samples = find_seq_samples(probes);
     if (samples.count < 4 || !calculate_diffs_and_rates(probes, &samples)) {
@@ -114,6 +148,10 @@ uint32_t calculate_gcd_test(struct probe_result *probes) {
     return gcd_array(samples.diffs, samples.count - 1);
 }
 
+/**
+ * Function to calculate the ISR test value from the sequence TCP probes.
+ * Returns UNAVAILABLE_SIG if there are not enough valid samples or if the calculation fails.
+ */
 uint32_t calculate_isr_test(struct probe_result *probes) {
     struct seq_samples samples = find_seq_samples(probes);
     if (samples.count < 4 || !calculate_diffs_and_rates(probes, &samples)) {
@@ -132,6 +170,10 @@ uint32_t calculate_isr_test(struct probe_result *probes) {
     return rate <= 1.0 ? 0 : (uint32_t)round(8.0 * log2(rate));
 }
 
+/**
+ * Function to calculate the SP test value from the sequence TCP probes.
+ * Returns UNAVAILABLE_SIG if there are not enough valid samples or if the calculation fails.
+ */
 uint32_t calculate_sp_test(struct probe_result *probes, uint32_t gcd_value) {
     struct seq_samples samples = find_seq_samples(probes);
     if (samples.count < 4 || !calculate_diffs_and_rates(probes, &samples) ||
@@ -154,12 +196,12 @@ uint32_t calculate_sp_test(struct probe_result *probes, uint32_t gcd_value) {
     return deviation <= 1.0 ? 0 : (uint32_t)round(8.0 * log2(deviation));
 }
 
-enum ip_id_test_type {
-    IP_ID_TEST_TI,
-    IP_ID_TEST_CI,
-    IP_ID_TEST_II
-};
-
+/**
+ * Function that is used the calculate the IP ID tests (TI, CI, II) based on the received responses to the probes.
+ * It calculates the IP ID fingerprint and returns the result in the provided ip_id_fingerprint structure.
+ * @return 1 if the fingerprint was successfully calculated, 0 if not enough valid samples were available, 
+ * or -1 on error (e.g., invalid arguments).
+ */
 int calculate_ip_id_fingerprints(struct probe_result *probes, size_t probe_count, enum ip_id_test_type test_type, struct ip_id_fingerprint *result) {
      if (result == NULL) {
         return -1;
@@ -308,6 +350,10 @@ int calculate_ip_id_fingerprints(struct probe_result *probes, size_t probe_count
     return result->kind != IP_ID_UNAVAILABLE ? 1 : 0;
 }
 
+/**
+ * Fucntion to calculate the timestamp test value from the sequence TCP probes.
+ * Returns TIMESTAMP_UNAVAILABLE if there are not enough valid samples or if the calculation fails.
+ */
 struct timestamp_fingerprint calculate_timestamp_fingerprint(struct probe_result *probes) {
     struct timestamp_fingerprint result = {.kind = TIMESTAMP_UNAVAILABLE};
     struct seq_samples samples = find_seq_samples(probes);
@@ -367,6 +413,11 @@ struct timestamp_fingerprint calculate_timestamp_fingerprint(struct probe_result
     return result;
 }
 
+/**
+ * Function to calculate the sequence fingerprint based on the received responses to the probes.
+ * It calculates the GCD, ISR, SP, and timestamp tests and returns the result in the provided seq_fingerprint structure.
+ * @return 1 if the fingerprint was successfully calculated, -
+ */
 int calculate_seq_fingerprint(struct probe_result *probes, struct seq_fingerprint *fingerprint) {
     if (probes == NULL || fingerprint == NULL) {
         return -1;
@@ -385,7 +436,11 @@ int calculate_seq_fingerprint(struct probe_result *probes, struct seq_fingerprin
     return 1;
 }
 
-
+/**
+ * Function to generate the ops string representation of the TCP options from the received response to a probe.
+ * It returns the ops string in the provided ops_string buffer.
+ * @return The ops string if successful, NULL on error (e.g., invalid arguments or invalid TCP options).
+ */
 char *generate_ops_string(const uint8_t *options, size_t options_len, char *ops_string) {
     if (ops_string == NULL) {
         return NULL;
@@ -490,6 +545,11 @@ char *generate_ops_string(const uint8_t *options, size_t options_len, char *ops_
     return ops_string;
 }
 
+/**
+ * Function to calculate the ops string representation of the TCP options from the received response to a probe.
+ * This function calls the previous generate_ops_string function and returns the ops string in the provided ops buffer.
+ * @return 1 if the ops string was successfully calculated, -1 on error (e
+ */
 int calculate_ops_test(struct probe_result probe, char ops[OPS_STRING_MAX_LENGTH]) {
     if (ops == NULL) {
         return -1;
@@ -502,6 +562,11 @@ int calculate_ops_test(struct probe_result probe, char ops[OPS_STRING_MAX_LENGTH
     return 1;
 }
 
+/**
+ * Function to calculate the common TCP fingerprint tests (R, DF, O, W, T, TG, Q) based on the received response to a probe.
+ * It calculates the common TCP fingerprint and returns the result in the provided tcp_common_fingerprint structure.
+ * @return 1 if the fingerprint was successfully calculated, 0 if the R test failed, or -1 on error (e.g., invalid arguments).
+ */
 int calculate_tcp_common_fingerprint(struct probe_result probe, struct tcp_common_fingerprint *tcp_common_fingerprint) {
     if (tcp_common_fingerprint == NULL) {
         return -1;
@@ -560,6 +625,11 @@ int calculate_tcp_common_fingerprint(struct probe_result probe, struct tcp_commo
     return 1;
 }
 
+/**
+ * Function to calculate the T1-T7 test lines which contain the common TCP tests and S, A, F, RD tests.
+ * It calculates the TCP fingerprint and returns the result in the provided tcp_fingerprint structure.
+ * @return 1 if the fingerprint was successfully calculated, -1 on error (e.g., invalid arguments).
+ */
 int calculate_t_tests(struct probe_result probe, struct tcp_fingerprint *tcp_fingerprint) {
     if (tcp_fingerprint == NULL) {
         return -1;
@@ -625,6 +695,11 @@ int calculate_t_tests(struct probe_result probe, struct tcp_fingerprint *tcp_fin
     return 1;
 }
 
+/**
+ * Function to calculate the ECN fingerprint tests based on the received response to a probe.
+ * It calculates the ECN fingerprint and returns the result in the provided ecn_fingerprint structure.
+ * @return 1 if the fingerprint was successfully calculated, -1 on error (e.g., invalid arguments).
+ */
 int calculate_ecn_fingerprint(struct probe_result probe, struct ecn_fingerprint *ecn_fingerprint) {
     if (ecn_fingerprint == NULL) {
         return -1;
@@ -656,6 +731,11 @@ int calculate_ecn_fingerprint(struct probe_result probe, struct ecn_fingerprint 
     return 1;
 }
 
+/**
+ * Function to calculate the IE fingerprint tests based on the received response to the two ICMP probes.
+ * It calculates the IE fingerprint and returns the result in the provided ie_fingerprint structure.
+ * @return 1 if the fingerprint was successfully calculated, -1 on error (e.g., invalid arguments).
+ */
 int calculate_ie_fingerprint(struct probe_result probes[2], struct ie_fingerprint *ie_fingerprint) {
     if (ie_fingerprint == NULL) {
         return -1;
@@ -721,6 +801,12 @@ int calculate_ie_fingerprint(struct probe_result probes[2], struct ie_fingerprin
     return 1;
 }
 
+/**
+ * Function to calculate the SS (Shared Sequence) test value based on the received responses 
+ * to the sequence TCP probes and the two ICMP probes.
+ * @return 1 if the SS test was successfully calculated, 0 if not enough valid samples were available,
+ * or -1 on error (e.g., invalid arguments).
+ */
 int calculate_shared_sequence(struct probe_result *seq_probes, struct probe_result *ie_probes, struct seq_fingerprint *seq_fingerprint) {
     if (seq_probes == NULL || ie_probes == NULL || seq_fingerprint == NULL) {
         return -1;
@@ -757,6 +843,11 @@ int calculate_shared_sequence(struct probe_result *seq_probes, struct probe_resu
     return 1;
 }
 
+/**
+ * Function to calculate the U1 fingerprint tests based on the received response to a UDP probe to a closed port.
+ * It calculates the U1 fingerprint and returns the result in the provided u1_fingerprint structure.
+ * @return 1 if the fingerprint was successfully calculated, 0 if the R test failed, or -1 on error (e.g., invalid arguments).
+ */
 int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint *u1_fingerprint) {
     if (u1_fingerprint == NULL) {
         return -1;
@@ -864,6 +955,13 @@ int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint
     return 1;
 }
 
+/**
+ * The main function to calculate the OS fingerprint based on the received responses to the probes.
+ * It calculates the U1, SEQ, T2-T7, IE, and ECN tests and returns the result in the provided os_fingerprint structure.
+ * @param probes The array of probe results.
+ * @return The calculated os_fingerprint structure. If the probes are NULL or if any of the tests fail,
+ * the valid field in the returned structure will be set to false, indicating an invalid fingerprint.
+ */
 struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     struct os_fingerprint fingerprint = {0};
     T_hops = UNAVAILABLE_SIG_16;
@@ -948,6 +1046,13 @@ struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     return fingerprint;
 }
 
+/**
+ * Function to generate the string representation of the OS fingerprint based on the received responses to the probes.
+ * It calculates the OS fingerprint and returns the result in the provided buffer.
+ * The function calls the fingerprint formating function to format the fingerprint into a string.
+ * @return The number of characters written to the buffer (excluding the null terminator) if successful, 
+ * or -1 on error (e.g., invalid arguments or invalid fingerprint).
+ */
 int generate_fingerprint_string(struct probe_result *probes, char *buffer, size_t capacity) {
     if (probes == NULL || buffer == NULL || capacity == 0) {
         return -1;

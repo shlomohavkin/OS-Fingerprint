@@ -10,10 +10,13 @@
 #include <sys/socket.h>
 #include <arpa/inet.h> 
 
+#define MAX_MATCHES 10
+#define MAX_FINGERPRINT_LENGTH 1024
 
 char *target_IP;
 char *OPEN_PORT;
 char *CLOSED_PORT;
+
 
 static bool matches_quoted_udp(const struct udp_probe *probe, const uint8_t *ip, size_t len, struct in_addr source_ip, struct in_addr target_ip) {
     if (ip == NULL || len < 20 ||
@@ -423,9 +426,32 @@ int main(int argc, char **argv) {
 
 
     // Fingerprint Calculation 
-    char fingerprint[1024] = {0};
-    generate_fingerprint_string(probes_results, fingerprint, sizeof(fingerprint));
+    char *fingerprint = calloc(MAX_FINGERPRINT_LENGTH, sizeof(char));
+    if (fingerprint == NULL) {
+        fprintf(stderr, "Failed to allocate memory for fingerprint\n");
+        return EXIT_FAILURE;
+    }
+    if (generate_fingerprint_string(probes_results, fingerprint, MAX_FINGERPRINT_LENGTH) < 0) {
+        fprintf(stderr, "Failed to generate fingerprint string\n");
+        free(fingerprint);
+        return EXIT_FAILURE;
+    }
     printf("Fingerprint string: \n%s\n", fingerprint);
+
+    // Find OS matches in the database
+    struct os_match best_matches[MAX_MATCHES] = {0};
+    size_t match_count = 0;
+    if (find_os_matches("nmap-os-db", fingerprint, best_matches, MAX_MATCHES, &match_count) != 0) {
+        fprintf(stderr, "Failed to find OS matches in the database\n");
+        return EXIT_FAILURE;
+    }
+
+    for (size_t i = 0; i < match_count; i++) {
+        printf("Match %zu: OS: %s, Score: %.2f%%\n", i + 1, best_matches[i].os_name, best_matches[i].score * 100.0);
+    }
+
+    free_os_matches(best_matches, match_count);
+    free(fingerprint);
     return 0;
 }
 

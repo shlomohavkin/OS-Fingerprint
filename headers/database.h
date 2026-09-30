@@ -3,6 +3,7 @@
 
 #include "fingerprint.h"
 #include <ctype.h>
+#include <stdio.h>
 
 
 struct fingerprint_field {
@@ -32,20 +33,26 @@ struct match_weight {
     unsigned int points;
 };
 
-struct fingerprint_database {
-    struct database_entry *entries;
-    size_t entry_count;
-
+struct match_weights {
     struct match_weight *weights;
     size_t weight_count;
 };
 
 struct os_match {
-    size_t entry_index;       // Index in database.entries.
+    char *os_name;
     size_t compared_fields;
     uint64_t matched_points;
     uint64_t possible_points;
     double score;            // Between 0.0 and 1.0.
 };
+
+
+int read_match_weights(FILE *file, struct match_weights *out);
+int read_next_reference(FILE *file, struct database_entry *out);
+int parse_observed_fingerprint(const char *text, struct match_fingerprint *out);
+
+void free_match_fingerprint(struct match_fingerprint *fingerprint);
+void free_database_entry(struct database_entry *entry);
+void free_match_weights(struct match_weights *weights);
 
 #endif /* DATABASE_H */

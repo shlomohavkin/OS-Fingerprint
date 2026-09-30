@@ -7,7 +7,63 @@
         }                                            \
     } while (0)
 
-    
+
+void free_fingerprint_group(struct fingerprint_group *group) {
+    if (group == NULL) {
+        return;
+    }
+
+    for (size_t i = 0; i < group->field_count; i++) {
+        free(group->fields[i].name);
+        free(group->fields[i].value);
+    }
+
+    free(group->fields);
+    free(group->name);
+
+    *group = (struct fingerprint_group){0};
+}
+
+void free_match_fingerprint(struct match_fingerprint *fingerprint) {
+    if (fingerprint == NULL) {
+        return;
+    }
+
+    for (size_t i = 0; i < fingerprint->group_count; i++) {
+        free_fingerprint_group(&fingerprint->groups[i]);
+    }
+
+    free(fingerprint->groups);
+
+    *fingerprint = (struct match_fingerprint){0};
+}
+
+void free_database_entry(struct database_entry *entry) {
+    if (entry == NULL) {
+        return;
+    }
+
+    free(entry->os_name);
+    free_match_fingerprint(&entry->fingerprint);
+
+    *entry = (struct database_entry){0};
+}
+
+void free_match_weights(struct match_weights *weights) {
+    if (weights == NULL) {
+        return;
+    }
+    for (size_t i = 0; i < weights->weight_count; i++) {
+        free(weights->weights[i].group_name);
+        free(weights->weights[i].field_name);
+    }
+
+    free(weights->weights);
+
+    *weights = (struct match_weights){0};
+}
+
+
 int parse_fingerprint_group(const char *line, struct fingerprint_group *out) {
     if (line == NULL || out == NULL) {
         return -1;
@@ -152,7 +208,6 @@ int parse_fingerprint_group(const char *line, struct fingerprint_group *out) {
     return 0;
 }
 
-
 int parse_observed_fingerprint(const char *text, struct match_fingerprint *out) {
     if (text == NULL || out == NULL) {
         return -1;
@@ -214,22 +269,297 @@ int parse_observed_fingerprint(const char *text, struct match_fingerprint *out) 
     return 0;
 }
 
+static int add_group_weights(const struct fingerprint_group *group, struct match_weights *out) {
+    for (size_t i = 0; i < group->field_count; i++) {
+        const struct fingerprint_field *field = &group->fields[i];
+        const char *value = field->value;
 
-/* This function:
-1. Opens the file.
-2. Reads lines using getline().
-3. Recognizes MatchPoints and Fingerprint ....
-4. Parses group lines.
-5. Adds completed entries to the database.
-6. Handles the final entry at EOF.
-Initially, skip Class and CPE metadata.*/
-int load_fingerprint_database(const char *path, struct fingerprint_database *out);
+        // Accept decimal digits only.
+        if (*value == '\0') {
+            return -1;
+        }
 
-int parse_match_points_group(const char *line, struct fingerprint_database *database);
+        for (const char *p = value; *p != '\0'; p++) {
+            if (!isdigit((unsigned char)*p)) {
+                return -1;
+            }
+        }
+
+        errno = 0;
+        char *end;
+        unsigned long points = strtoul(value, &end, 10);
+
+        if (errno == ERANGE || *end != '\0' || points > UINT_MAX) {
+            return -1;
+        }
+
+        // Reject duplicate weights
+        for (size_t j = 0; j < out->weight_count; j++) {
+            if (strcmp(out->weights[j].group_name, group->name) == 0 &&
+                strcmp(out->weights[j].field_name, field->name) == 0) {
+                return -1;
+            }
+        }
+
+        struct match_weight weight = {
+            .group_name = strdup(group->name),
+            .field_name = strdup(field->name),
+            .points = (unsigned int)points
+        };
+        if (weight.group_name == NULL || weight.field_name == NULL) {
+            free(weight.group_name);
+            free(weight.field_name);
+            return -1;
+        }
+
+        struct match_weight *new_weights = realloc(out->weights, (out->weight_count + 1) * sizeof(*out->weights));
+        if (new_weights == NULL) {
+            free(weight.group_name);
+            free(weight.field_name);
+            return -1;
+        }
+
+        out->weights = new_weights;
+        out->weights[out->weight_count++] = weight;
+    }
+
+    return 0;
+}
+
+/** Read the MatchPoints section.
+   * @param file The file to read from.
+   * @param out The struct to store the read weights in.
+   * @return 0 on success, -1 on failure. */ 
+   // need to rewind the file ptr before after calling this fuction
+int read_match_weights(FILE *file, struct match_weights *out) {
+    if (file == NULL || out == NULL) {
+        return -1;
+    }
+
+    struct match_weights weights = {0};
+    char *line = NULL;
+    size_t line_capacity = 0;
+    bool found = false;
+
+    for (;;) {
+        if (getline(&line, &line_capacity, file) == -1) {
+            if (ferror(file) || !feof(file)) {
+                fprintf(stderr, "Error reading database file\n");
+                free(line);
+                free_match_weights(&weights);
+                return -1;
+            }
+
+            break; // Normal EOF.
+        }
+
+        char *p = line;
+        SKIP_WHITESPACE(p);
+
+        // Remove trailing whitespace, including newline.
+        size_t len = strlen(p);
+        while (len > 0 && isspace((unsigned char)p[len - 1])) {
+            p[--len] = '\0';
+        }
+
+        if (*p == '\0' || *p == '#') {
+            continue;
+        }
+
+        if (!found) {
+            if (strcmp(p, "MatchPoints") == 0) {
+                found = true;
+            }
+            continue;
+        }
+
+        if (strncmp(p, "Fingerprint", 11) == 0 &&
+            isspace((unsigned char)p[11])) {
+            break;
+        }
+
+        struct fingerprint_group group = {0};
+
+        if (parse_fingerprint_group(p, &group) < 0) {
+            fprintf(stderr, "Failed to parse MatchPoints group: %s\n", p);
+            free(line);
+            free_match_weights(&weights);
+            return -1;
+        }
+
+        int status = add_group_weights(&group, &weights);
+        free_fingerprint_group(&group);
+
+        if (status < 0) {
+            fprintf(stderr, "Failed to add group weights for group: %s\n", group.name);
+            free(line);
+            free_match_weights(&weights);
+            return -1;
+        }
+    }
+
+    if (ferror(file) || !found || weights.weight_count == 0) {
+        fprintf(stderr, "Failed to read MatchPoints section from database file\n");
+        free(line);
+        free_match_weights(&weights);
+        return -1;
+    }
+
+    free(line);
+    *out = weights;
+    return 0;
+}
 
 
-void free_fingerprint_group(struct fingerprint_group *group);
+/* Read one complete reference fingerprint.
+   Returns 1 on success, 0 at EOF, -1 on failure. */
+int read_next_reference(FILE *file, struct database_entry *out) {
+    if (file == NULL || out == NULL) {
+        return -1;
+    }
 
-void free_match_fingerprint(struct match_fingerprint *fingerprint);
+    struct database_entry entry = {0};
+    char *line = NULL;
+    size_t line_capacity = 0;
+    bool found = false;
 
-void free_fingerprint_database(struct fingerprint_database *database);
+    for (;;) {
+        // Remember where this line starts
+        fpos_t position;
+        if (fgetpos(file, &position) != 0) {
+            fprintf(stderr, "Failed to get file position\n");
+            free(line);
+            free_database_entry(&entry);
+            return -1;
+        }
+
+        if (getline(&line, &line_capacity, file) == -1) {
+            // getline() can also fail for reasons other than EOF.
+            if (ferror(file) || !feof(file)) {
+                fprintf(stderr, "Error reading database file\n");
+                free(line);
+                free_database_entry(&entry);
+                return -1;
+            }
+            break;
+        }
+
+        char *p = line;
+        SKIP_WHITESPACE(p);
+
+        // Remove trailing whitespace, including the newline.
+        size_t len = strlen(p);
+        while (len > 0 && isspace((unsigned char)p[len - 1])) {
+            p[--len] = '\0';
+        }
+
+        if (*p == '\0' || *p == '#') {
+            continue;
+        }
+
+        bool is_header = strncmp(p, "Fingerprint", 11) == 0 &&
+                        (p[11] == '\0' || isspace((unsigned char)p[11]));
+
+        if (is_header) {
+            if (found) {
+                // Leave the next entry's header for the next call
+                if (fsetpos(file, &position) != 0) {
+                    fprintf(stderr, "Failed to set file position\n");
+                    free(line);
+                    free_database_entry(&entry);
+                    return -1;
+                }
+                break;
+            }
+
+            p += 11; // Skip "Fingerprint"
+            SKIP_WHITESPACE(p);
+
+            if (*p == '\0') {
+                fprintf(stderr, "Fingerprint header missing OS name\n");
+                free(line);
+                free_database_entry(&entry);
+                return -1;
+            }
+
+            entry.os_name = strdup(p);
+            if (entry.os_name == NULL) {
+                fprintf(stderr, "Failed to allocate memory for OS name\n");
+                free(line);
+                free_database_entry(&entry);
+                return -1;
+            }
+
+            found = true;
+            continue;
+        }
+
+        // Skip MatchPoints and other content before the first entry
+        if (!found) {
+            continue;
+        }
+
+        // Metadata is not used by this matcher yet.
+        if ((strncmp(p, "Class", 5) == 0 && (p[5] == '\0' || isspace((unsigned char)p[5]))) ||
+            (strncmp(p, "CPE", 3) == 0 && (p[3] == '\0' || isspace((unsigned char)p[3])))) {
+            continue;
+        }
+
+        struct fingerprint_group group = {0};
+
+        if (parse_fingerprint_group(p, &group) != 0) {
+            fprintf(stderr, "Failed to parse fingerprint group: %s\n", p);
+            free(line);
+            free_database_entry(&entry);
+            return -1;
+        }
+
+        struct match_fingerprint *fingerprint = &entry.fingerprint;
+
+        // A fingerprint should not have duplicate group names 
+        for (size_t i = 0; i < fingerprint->group_count; i++) {
+            if (strcmp(fingerprint->groups[i].name, group.name) == 0) {
+                fprintf(stderr, "Duplicate group name in fingerprint: %s\n", group.name);
+                free_fingerprint_group(&group);
+                free(line);
+                free_database_entry(&entry);
+                return -1;
+            }
+        }
+
+        if (fingerprint->group_count >= SIZE_MAX / sizeof(*fingerprint->groups)) {
+            fprintf(stderr, "Too many groups in fingerprint\n");
+            free_fingerprint_group(&group);
+            free(line);
+            free_database_entry(&entry);
+            return -1;
+        }
+
+        struct fingerprint_group *new_groups = realloc(fingerprint->groups, (fingerprint->group_count + 1) * sizeof(*fingerprint->groups));
+        if (new_groups == NULL) {
+            fprintf(stderr, "Failed to allocate memory for fingerprint groups\n");
+            free_fingerprint_group(&group);
+            free(line);
+            free_database_entry(&entry);
+            return -1;
+        }
+
+        fingerprint->groups = new_groups;
+        fingerprint->groups[fingerprint->group_count++] = group;
+    }
+
+    free(line);
+
+    if (!found) {
+        return 0; // EOF with no more entries.
+    }
+
+    if (entry.fingerprint.group_count == 0) {
+        fprintf(stderr, "Fingerprint for OS '%s' has no groups\n", entry.os_name);
+        free_database_entry(&entry);
+        return -1;
+    }
+
+    *out = entry; // Transfer ownership to the caller.
+    return 1;
+}

@@ -315,7 +315,7 @@ int collect_responses(struct network *net, struct scan_state *scan, const struct
         matched_count += (size_t)matched;
     }
 
-    printf("Matched %zu of %zu pending probes\n", matched_count, pending_count);
+    printf("\nMatched %zu of %zu pending probes\n", matched_count, pending_count);
     for (size_t i = 0; i < NUM_PROBES_SENT; i++) {
         if (scan->results[i].status == PROBE_NO_RESPONSE)
             printf("No response for probe at index %zu\n", i);

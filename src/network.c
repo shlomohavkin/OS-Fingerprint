@@ -1,4 +1,110 @@
 #include "network.h"
+#include <ifaddrs.h>
+
+
+/**
+ * Function to determine the source IP address that would be used to reach a given target IP address.
+ * @return 0 on success, -1 on failure.
+ */
+int get_source_ip(const char *target_ip, char *source_ip) {
+    if (target_ip == NULL || source_ip == NULL)
+        return -1;
+
+    source_ip[0] = '\0';
+
+    struct sockaddr_in target = {
+        .sin_family = AF_INET,
+        .sin_port = htons(9)  /* No data is sent to this port. */
+    };
+
+    if (inet_pton(AF_INET, target_ip, &target.sin_addr) != 1) {
+        fprintf(stderr, "Invalid target IPv4 address\n");
+        return -1;
+    }
+
+    int fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (fd < 0) {
+        perror("socket");
+        return -1;
+    }
+
+    if (connect(fd, (struct sockaddr *)&target, sizeof(target)) < 0) {
+        perror("connect");
+        close(fd);
+        return -1;
+    }
+
+    struct sockaddr_in local = {0};
+    socklen_t local_len = sizeof(local);
+
+    if (getsockname(fd, (struct sockaddr *)&local, &local_len) < 0) {
+        perror("getsockname");
+        close(fd);
+        return -1;
+    }
+    if (inet_ntop(AF_INET, &local.sin_addr, source_ip, INET_ADDRSTRLEN) == NULL) {
+        perror("inet_ntop");
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
+
+/**
+ * Function to determine the network interface that would be used to send packets from a given IP address.
+ * @return 0 on success, -1 on failure.
+ */
+int get_interface_for_ip(const char *source_ip, char *interface_name, size_t capacity) {
+    if (source_ip == NULL || interface_name == NULL || capacity == 0)
+        return -1;
+
+    interface_name[0] = '\0';
+
+    struct in_addr source_address;
+    if (inet_pton(AF_INET, source_ip, &source_address) != 1) {
+        fprintf(stderr, "Invalid source IPv4 address\n");
+        return -1;
+    }
+
+    struct ifaddrs *interfaces = NULL;
+    if (getifaddrs(&interfaces) < 0) {
+        perror("getifaddrs");
+        return -1;
+    }
+
+    int result = -1;
+
+    for (const struct ifaddrs *entry = interfaces; entry != NULL; entry = entry->ifa_next) {
+        if (entry->ifa_addr == NULL || entry->ifa_addr->sa_family != AF_INET || entry->ifa_name == NULL) {
+            continue;
+        }
+
+        const struct sockaddr_in *address = (const struct sockaddr_in *)entry->ifa_addr;
+        if (address->sin_addr.s_addr != source_address.s_addr)
+            continue;
+
+        size_t name_length = strlen(entry->ifa_name);
+        if (name_length >= capacity) {
+            fprintf(stderr, "Interface name buffer is too small\n");
+            break;
+        }
+
+        memcpy(interface_name, entry->ifa_name, name_length + 1);
+        result = 0;
+        break;
+    }
+
+    freeifaddrs(interfaces);
+
+    if (result < 0)
+        fprintf(stderr, "Could not select an interface for %s\n", source_ip);
+
+    return result;
+}
+
 
 /**
  * Initialize the network for sending and receiving packets.

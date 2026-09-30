@@ -11,6 +11,8 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <arpa/inet.h>
+#include <net/if.h>
 
 #define MAX_MATCHES 10
 #define MAX_FINGERPRINT_LENGTH 1024
@@ -30,12 +32,24 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    char source_ip[INET_ADDRSTRLEN];
+    if (get_source_ip(argv[1], source_ip) < 0) {
+        fprintf(stderr, "Failed to determine source IP for target %s\n", argv[1]);
+        return EXIT_FAILURE;
+    }
+
+    char interface_name[IFNAMSIZ];
+    if (get_interface_for_ip(source_ip, interface_name, sizeof(interface_name)) < 0) {
+        fprintf(stderr, "Failed to determine network interface for source IP %s\n", source_ip);
+        return EXIT_FAILURE;
+    }
+
     // Fill the scan configuration with the provided arguments and default values
     // for the current scan.
     struct scan_config config = {
         .target_ip = argv[1],
-        .source_ip = "172.25.0.230",
-        .interface_name = "eth0",
+        .source_ip = source_ip,
+        .interface_name = interface_name, // eth0 for WSL and ens33 for Ubuntu VM
         .database_path = "nmap-os-db",
         .open_port = atoi(open_port),
         .closed_port = atoi(closed_port),
@@ -96,6 +110,7 @@ int main(int argc, char **argv) {
         goto cleanup;
     }
 
+    printf("Found %zu possible OS matches:\n", match_count);
     for (size_t i = 0; i < match_count; i++) {
         printf("Match %zu: OS: %s, Score: %.2f%%\n", i + 1, best_matches[i].os_name, best_matches[i].score * 100.0);
     }

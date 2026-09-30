@@ -449,8 +449,6 @@ char *generate_ops_string(const uint8_t *options, size_t options_len, char *ops_
         // CONVERT TCP OPTIONS TO OPS STRING
         if (option_type == TCPOPT_EOL) {
             ops_string[ops_index++] = 'L';
-            ops_string[ops_index] = '\0';
-            return ops_string;
         } else if (option_type == TCPOPT_NOP) {
             ops_string[ops_index++] = 'N';
         } else if (option_type == TCPOPT_MAXSEG) {

@@ -5,3 +5,5 @@ The sent packets are filled with special, irregular headers, data and destinatio
 The program analyzes the reponses from the target machine, calculates specific tests and then crafts a unique fingerprint. This fingerprint is then compared 
 to an existing large database of operating system-fingerprint entries to find the operating system which fingerprint is most similar to the calculated fingerprint.
 The program outputs the 10 most probable operating systems for the specified ip address.
+
+The project is written in C and developed and tested on Ubuntu 24.04 LTS, using Linux networking APIs.

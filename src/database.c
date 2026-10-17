@@ -1,3 +1,12 @@
+/**
+ * @file database.c
+ * @brief Implementation of functions for parsing and managing the OS fingerprint database.
+ * This file contains functions to parse fingerprint groups, observed fingerprints, 
+ * and match weights from text representations. It also provides functions to free 
+ * allocated memory for database entries, match fingerprints, and match weights.
+ */
+
+
 #include "database.h"
 
 #define SKIP_WHITESPACE(ptr)                         \

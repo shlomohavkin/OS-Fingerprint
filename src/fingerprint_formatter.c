@@ -1,3 +1,12 @@
+/**
+ * @file fingerprint_formatter.c
+ * @brief Implementation of functions for formatting OS fingerprint data into string representations.
+ * @details This file contains functions to format the various components of an OS fingerprint,
+ * such as SEQ, U1, IE, and ECN tests, from the data string into the Nmap string format. 
+ * These formatted strings are then used for matching against a database of known fingerprints.
+ */
+
+
 #include "fingerprint_formatter.h"
 
 /**

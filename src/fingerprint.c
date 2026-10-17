@@ -1,3 +1,12 @@
+/**
+ * @file fingerprint.c
+ * @brief Implementation of functions for calculating OS fingerprint tests from probe results.
+ * @details This file contains functions to calculate various tests (GCD, ISR, SP, etc.)
+ * based on the responses received from TCP, ICMP, and UDP probes. The calculated test
+ * values are used to generate an OS fingerprint string for matching against a database of known fingerprints.
+ */
+
+
 #include "fingerprint.h"
 #include "fingerprint_formatter.h"
 

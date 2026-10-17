@@ -59,9 +59,6 @@ struct probe_result {
     struct timespec sent_at;   /* Actual send time: CLOCK_MONOTONIC */
 
     struct parsed_info parsed_response;
-
-    // bool syn_ack_received;
-    // bool ack_matched;
 };
 
 #endif

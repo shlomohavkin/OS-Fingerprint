@@ -1,3 +1,11 @@
+/**
+ * @file matcher.c
+ * @brief Implementation of functions for matching observed OS fingerprints against a database of known fingerprints.
+ * @details This file contains functions to read the database of known fingerprints, parse observed fingerprints,
+ * and perform matching based on defined weights for each fingerprint field. The matching process calculates
+ * a score for each potential OS match and returns the best matches based on the observed fingerprint.
+ */
+
 #include "matcher.h"
 
 /**
@@ -100,7 +108,7 @@ static int parse_hex_slice(const char *text, size_t length, uint32_t *out) {
 }
 
 /* This is the signature of the main function that is called recursively. */
-int match_expression_slice( const char *observed, size_t observed_len, const char *expression, size_t expression_len, bool tcp_options);
+int match_expression_slice(const char *observed, size_t observed_len, const char *expression, size_t expression_len, bool tcp_options);
 
 
 /**

@@ -1,3 +1,14 @@
+/**
+ * @file scan.c
+ * @brief Implementation of functions for preparing and managing the scanning process. 
+ * @details This file is responsible for orchestrating the scanning process, ensuring that the probes are correctly 
+ * prepared and sent to the target.
+ * This file contains functions to prepare the probes for scanning a target IP address,
+ * including constructing TCP, ICMP, and UDP packets based on the provided scan configuration.
+ * It also manages the scan state, storing the results of sent probes and their corresponding packets.
+ */
+
+
 #include "packet.h"
 #include "probes.h"
 #include "probe_matcher.h"

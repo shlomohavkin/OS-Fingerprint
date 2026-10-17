@@ -1,3 +1,12 @@
+/**
+ * @file probe_matcher.c
+ * @brief Implementation of functions for matching received probe responses to sent probes.
+ * @details This file contains functions to match the received responses to the sent probes based on their specifications.
+ * It verifies that the responses match the expected protocol, ports, and other relevant fields of the
+ * sent probes. The matching process updates the probe_result structures with the parsed responses and their statuses.
+ */
+
+
 #include "probe_matcher.h"
 
 /**

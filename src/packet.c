@@ -1,3 +1,11 @@
+/**
+ * @file packet.c
+ * @brief Implementation of functions for constructing raw network packets (TCP, ICMP, UDP).
+ * @details This file contains functions to construct raw TCP, ICMP, and UDP packets based on the provided 
+ * probe specifications. The constructed packets include the necessary headers and options, and are ready to be sent.
+ */
+
+
 #include "packet.h"
 
 #define ETHERNET_HEADER_SIZE 14
@@ -541,10 +549,6 @@ int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int data
 
     case IPPROTO_ICMP:
         status = parse_icmp_response(protocol_header, protocol_len, &parsed_res);
-        break;
-
-    case IPPROTO_UDP:
-        // status = parse_udp_response(protocol_header, protocol_len, &parsed_res);
         break;
 
     default:

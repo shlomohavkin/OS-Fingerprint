@@ -1,3 +1,12 @@
+/**
+ * @file network.c
+ * @brief Implementation of functions for network operations, including sending and receiving packets.
+ * @details This file contains functions to determine the source IP and network interface for a given target IP,
+ * initialize the network for sending and receiving packets, and handle raw socket operations.
+ * It also receives packets and calls the appropriate parsing functions to extract relevant information from the responses.
+ */
+
+
 #include "network.h"
 #include <ifaddrs.h>
 

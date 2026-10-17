@@ -1,3 +1,11 @@
+/**
+ * @file probes.c
+ * @brief Implementation of functions for generating probe specifications.
+ * @details This file contains functions to generate the specifications for various probes (TCP, ICMP, UDP) 
+ * used in OS fingerprinting. The generated specifications include source/destination ports, sequence numbers, flags, 
+ * and other relevant fields.
+ */
+
 #include <probes.h>
 
 /**

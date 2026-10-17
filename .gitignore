@@ -11,3 +11,5 @@ core.*
 
 # Local secrets
 .env
+os-fingerprint-source.zip
+*Zone.Identifier

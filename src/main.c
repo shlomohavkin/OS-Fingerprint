@@ -1,3 +1,16 @@
+/**
+ * @file main.c
+ * @author Shlomo Havkin
+ * @brief Main entry point for the OS fingerprinting tool.
+ * @details This program performs OS fingerprinting by sending crafted 
+ * network probes to a target IP address and analyzing the responses.
+ * It constructs TCP, ICMP and UDP packets, sends them to the target, collects the responses, 
+ * generates a fingerprint string, and matches it against a database of known fingerprints 
+ * to identify the operating system of the target.
+ */
+
+
+
 #include "packet.h"
 #include "probes.h"
 #include "network.h"
@@ -51,6 +64,7 @@ int main(int argc, char **argv) {
         .source_ip = source_ip,
         .interface_name = interface_name, // eth0 for WSL and ens33 for Ubuntu VM
         .database_path = "nmap-os-db",
+        // nmap databse path: /usr/local/share/nmap/nmap-os-db
         .open_port = atoi(open_port),
         .closed_port = atoi(closed_port),
         .first_source_port = SRC_PORT_INIT,

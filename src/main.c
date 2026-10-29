@@ -18,6 +18,8 @@
 #include "fingerprint.h"
 #include "structures.h"
 #include "scan.h"
+#include <errno.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +31,30 @@
 
 #define MAX_MATCHES 10
 #define MAX_FINGERPRINT_LENGTH 1024
+
+/**
+ * Function to parse a port number from a string and to validate 
+ * that it is within the valid range (1-65535) to avoid integer overflow issues.
+ * @return 0 on success, -1 on failure.
+ */
+static int parse_port(const char *text, uint16_t *port) {
+    char *end = NULL;
+    unsigned long value;
+
+    if (text == NULL || *text < '0' || *text > '9') {
+        return -1;
+    }
+
+    errno = 0;
+    value = strtoul(text, &end, 10);
+    if (errno == ERANGE || end == text || *end != '\0' ||
+        value < 1 || value > UINT16_MAX) {
+        return -1;
+    }
+
+    *port = (uint16_t)value;
+    return 0;
+}
 
 int main(int argc, char **argv) {
     srand((unsigned)time(NULL));
@@ -45,6 +71,14 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+    uint16_t open_port_number;
+    uint16_t closed_port_number;
+    if (parse_port(open_port, &open_port_number) < 0 ||
+        parse_port(closed_port, &closed_port_number) < 0) {
+        fprintf(stderr, "Error: Port numbers must be between 1 and 65535.\n");
+        return EXIT_FAILURE;
+    }
+
     char source_ip[INET_ADDRSTRLEN];
     if (get_source_ip(argv[1], source_ip) < 0) {
         fprintf(stderr, "Failed to determine source IP for target %s\n", argv[1]);
@@ -56,7 +90,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Failed to determine network interface for source IP %s\n", source_ip);
         return EXIT_FAILURE;
     }
-
+    
     // Fill the scan configuration with the provided arguments and default values
     // for the current scan.
     struct scan_config config = {
@@ -65,14 +99,14 @@ int main(int argc, char **argv) {
         .interface_name = interface_name, // eth0 for WSL and ens33 for Ubuntu VM
         .database_path = "nmap-os-db",
         // nmap databse path: /usr/local/share/nmap/nmap-os-db
-        .open_port = atoi(open_port),
-        .closed_port = atoi(closed_port),
+        .open_port = open_port_number,
+        .closed_port = closed_port_number,
         .first_source_port = SRC_PORT_INIT,
         .receive_timeout = 2.5 // Timeout in seconds for receiving responses
     };
 
-    if (config.open_port == 0 || config.closed_port == 0) {
-        fprintf(stderr, "Error: Invalid target ports format. Please provide ports in the format <open_port>,<closed_port>\n");
+    if (config.open_port == config.closed_port) {
+        fprintf(stderr, "Error: Invalid target ports. Please provide valid port numbers in the format <open_port>,<closed_port>\n");
         return EXIT_FAILURE;
     }
 

@@ -428,14 +428,16 @@ int read_match_weights(FILE *file, struct match_weights *out) {
         }
 
         int status = add_group_weights(&group, &weights);
-        free_fingerprint_group(&group);
 
         if (status < 0) {
             fprintf(stderr, "Failed to add group weights for group: %s\n", group.name);
             free(line);
             free_match_weights(&weights);
+            free_fingerprint_group(&group);
             return -1;
         }
+
+        free_fingerprint_group(&group);
     }
 
     if (ferror(file) || !found || weights.weight_count == 0) {

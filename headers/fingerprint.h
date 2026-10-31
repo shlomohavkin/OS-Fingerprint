@@ -149,4 +149,25 @@ struct os_fingerprint {
 struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes);
 int generate_fingerprint_string(struct probe_result *probes, char *buffer, size_t capacity);
 
+
+// Helper functions for fingerprint calculations
+// This function arent intended to be used outside of the fingerprinting 
+// module, but are declared here for testing purposes.
+enum ip_id_test_type {
+    IP_ID_TEST_TI,
+    IP_ID_TEST_CI,
+    IP_ID_TEST_II
+};
+
+char *generate_ops_string(const uint8_t *options, size_t options_len, char *ops_string);
+uint32_t gcd(uint32_t a, uint32_t b);
+uint32_t gcd_array(uint32_t *arr, size_t len);
+double standard_deviation(const double *arr, size_t len);
+int calculate_seq_fingerprint(struct probe_result *probes, struct seq_fingerprint *fingerprint);
+int calculate_ip_id_fingerprints(struct probe_result *probes, size_t probe_count, enum ip_id_test_type test_type, struct ip_id_fingerprint *result);
+int calculate_shared_sequence(struct probe_result *seq_probes, struct probe_result *ie_probes, struct seq_fingerprint *seq_fingerprint);
+int calculate_t_tests(struct probe_result probe, struct tcp_fingerprint *tcp_fingerprint);
+int calculate_ecn_fingerprint(struct probe_result probe, struct ecn_fingerprint *ecn_fingerprint);
+int calculate_ie_fingerprint(struct probe_result probes[2], struct ie_fingerprint *ie_fingerprint);
+int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint *u1_fingerprint);
 #endif 

@@ -18,12 +18,6 @@ struct seq_samples {
     double rates[SEQ_PROBE_COUNT - 1];
 };
 
-enum ip_id_test_type {
-    IP_ID_TEST_TI,
-    IP_ID_TEST_CI,
-    IP_ID_TEST_II
-};
-
 static uint16_t T_hops = UNAVAILABLE_SIG_16; // Global variable to store the number of hops for T test
 
 /* HELPER FUNCTIONS  */

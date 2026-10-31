@@ -127,6 +127,6 @@ int main(void) {
     test_udp_port_unreachable_match();
     test_each_response_matches_one_probe();
 
-    printf("All probe matcher tests passed successfully.\n\n");
+    printf("All probe matcher tests passed successfully.\n");
     return 0;
 }

@@ -215,6 +215,6 @@ int main(void) {
     test_construct_icmp();
     test_construct_udp();
 
-    printf("All packet construction tests passed successfully.\n\n");
+    printf("All packet construction tests passed successfully.\n");
     return 0;
 }

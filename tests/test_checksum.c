@@ -24,6 +24,6 @@ int main(void) {
     uint16_t checksum_real_data = calculate_checksum(real_data, sizeof(real_data));
     assert(checksum_real_data == 0x9B22);
 
-    printf("All checksum tests passed successfully.\n\n");
+    printf("All checksum tests passed successfully.\n");
     return 0;
 }

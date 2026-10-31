@@ -63,6 +63,6 @@ int main(void) {
     test_tcp_options();
     test_invalid_brackets();
 
-    printf("All expression matcher tests passed successfully.\n\n");
+    printf("All expression matcher tests passed successfully.\n");
     return 0;
 }

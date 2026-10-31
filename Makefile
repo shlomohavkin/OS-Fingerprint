@@ -48,10 +48,10 @@ $(BUILD_DIR)/tests/%: $(TEST_DIR)/%.c $(LIB_OBJECTS)
 test: $(TEST_BINS)
 	@if [ -z "$(TEST_BINS)" ]; then echo "No tests found under $(TEST_DIR)/."; exit 1; fi
 	@for t in $(TEST_BINS); do \
-		echo "==> Running $$t"; \
+		echo "\n==> Running $$t"; \
 		./$$t || { echo "FAILED: $$t"; exit 1; }; \
 	done
-	@echo "All tests passed."
+	@echo "\nAll tests passed."
 
 -include $(DEPENDENCIES) $(TEST_DEPS)
 endif

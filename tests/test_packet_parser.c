@@ -256,6 +256,6 @@ int main(void) {
     test_parse_icmp();
     test_rejected_packets();
 
-    printf("All packet parser tests passed successfully.\n\n");
+    printf("All packet parser tests passed successfully.\n");
     return 0;
 }

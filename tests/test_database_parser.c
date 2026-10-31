@@ -111,6 +111,6 @@ int main(void) {
     test_read_match_weights();
     test_read_next_reference();
 
-    printf("All database parser tests passed successfully.\n\n");
+    printf("All database parser tests passed successfully.\n");
     return 0;
 }

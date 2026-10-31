@@ -129,6 +129,6 @@ int main(void) {
 
 
 
-    printf("All TCP options tests passed successfully.\n\n");
+    printf("All TCP options tests passed successfully.\n");
     return 0;
 }

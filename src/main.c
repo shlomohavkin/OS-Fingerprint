@@ -57,6 +57,15 @@ static int parse_port(const char *text, uint16_t *port) {
 }
 
 
+/**
+ * Main function that orchestrates the OS fingerprinting process. 
+ * It parses command-line arguments, initializes the network, prepares 
+ * and sends probes, collects responses, generates a fingerprint string, 
+ * and matches it against a database of known fingerprints.
+ * @param argc The number of command-line arguments.
+ * @param argv The array of command-line argument strings.
+ * @return EXIT_SUCCESS on success, EXIT_FAILURE on failure.
+ */
 int main(int argc, char **argv) {
     srand((unsigned)time(NULL));
 

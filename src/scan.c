@@ -180,12 +180,6 @@ static int prepare_u1_probe(struct scan_state *scan, const struct scan_config *c
 }
 
 
-/**
- * Calls the functions: prepare_sequence_probes, prepare_ie_probes, 
- * prepare_ecn_probe, prepare_t_probes, and prepare_u1_probe
- * to prepare all probes and construct their packets.
- * @return 0 on success, -1 on failure.
- */
 int prepare_probes(struct scan_state *scan, const struct scan_config *config) {
     if (scan == NULL || config == NULL)
         return -1;
@@ -200,10 +194,7 @@ int prepare_probes(struct scan_state *scan, const struct scan_config *config) {
     return 0;
 }
 
-/**
- * Open the network for the scan.
- * @return 0 on success, -1 on failure.
- */
+
 int open_scan_network(struct network *net, const struct scan_config *config) {
     uint16_t last_tcp_source_port = config->first_source_port + SEQ_PROBE_COUNT + TX_COUNT;
 
@@ -230,10 +221,7 @@ static int send_one_probe(struct network *net, struct scan_state *scan, size_t i
     return 0;
 }
 
-/**
- * Send all the prepared probes.
- * @return 0 on success, -1 on failure.
- */
+
 int send_probes(struct network *net, struct scan_state *scan, const struct scan_config *config) {
     // Send Sequence TCP Probes
     printf("Sending 6 SEQ TCP packets to: %s\n", config->target_ip);
@@ -272,10 +260,7 @@ int send_probes(struct network *net, struct scan_state *scan, const struct scan_
     return 0;
 }
 
-/**
- * Collect the responses to the sent probes.
- * @return The number of matched responses, or -1 on failure.
- */
+
 int collect_responses(struct network *net, struct scan_state *scan, const struct scan_config *config) {
     struct in_addr source_address;
     if (inet_pton(AF_INET, config->source_ip, &source_address) != 1) {
@@ -348,10 +333,7 @@ int collect_responses(struct network *net, struct scan_state *scan, const struct
     return (int)matched_count;
 }
 
-/**
- * Free the memory allocated for a scan.
- * @param scan The scan to free.
- */
+
 void free_scan(struct scan_state *scan) {
     if (scan == NULL)
         return;

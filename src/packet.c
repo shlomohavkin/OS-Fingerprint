@@ -14,13 +14,7 @@
 #define UDP_HEADER_SIZE       8
 #define ICMP_HEADER_SIZE      8
 
-/**
- * Constructs a raw TCP packet based on the provided TCP probe specifications and source IP address.
- * @param tcp_probe_spec The specifications for the TCP probe, 
- * including source/destination ports, sequence numbers, flags, 
- * window size, and TCP options. Which are created in the probe.c file.
- * @return A pointer to the constructed raw TCP packet, or NULL on failure. 
- */
+
 uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, size_t *packet_len) {
     if (packet_len == NULL) {
         return NULL;
@@ -103,12 +97,7 @@ uint8_t *construct_TCP_packet(struct tcp_probe tcp_probe_spec, char *source_ip, 
     return packet; // Success
 }
 
-/**
- * Constructs a raw ICMP packet based on the provided ICMP probe specifications and source IP address.
- * @param icmp_probe_spec The specifications for the ICMP probe, including destination IP, ICMP type/code, 
- * identifier/sequence, and payload.
- * @return A pointer to the constructed raw ICMP packet, or NULL on failure. 
- */
+
 uint8_t *construct_ICMP_packet(struct icmp_probe icmp_probe_spec, char *source_ip, size_t *packet_len) {
     if (source_ip == NULL || packet_len == NULL ) {
         return NULL; // Invalid arguments
@@ -168,13 +157,7 @@ uint8_t *construct_ICMP_packet(struct icmp_probe icmp_probe_spec, char *source_i
     return packet; // Success
 }
 
-/**
- * Constructs a raw UDP packet based on the provided UDP probe specifications and source IP address.
- * @param udp_probe_spec The specifications for the UDP probe, including source/destination ports, IP ID, TTL, and payload.
- * @param udp_checksum Pointer to a uint16_t variable where the calculated UDP checksum will be stored. This is done because
- * the UDP checksum is needed in the calculation of the fingerprint and is not stored in the UDP probe saved in the probe_result structure.
- * @return A pointer to the constructed raw UDP packet, or NULL on failure.
- */
+
 uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, size_t *packet_len, uint16_t *udp_checksum) {
     if (packet_len == NULL || udp_checksum == NULL) {
         return NULL;
@@ -250,13 +233,9 @@ uint8_t *construct_UDP_packet(struct udp_probe udp_probe_spec, char *source_ip, 
     return packet; // Success
 }
 
-/**
- * Function to calculate the checksum of a given data buffer. 
- * The fucntion is used to calculate the checksum for TCP, UDP, and ICMP packets.
- */
+
 uint16_t calculate_checksum(const uint8_t *data, size_t len) {
     uint32_t sum = 0;
-
 
     // sum the 16-bit words
     while (len >= 2) {
@@ -318,10 +297,7 @@ static int copy_bytes(uint8_t **destination, const uint8_t *source, size_t lengt
     return 1;
 }
 
-/**
- * Function to free the memory allocated for a parsed_info structure, 
- * including any dynamically allocated fields within it.
- */
+
 void free_parsed_info(struct parsed_info *parsed) {
     if (parsed == NULL) {
         return;
@@ -477,10 +453,7 @@ static int parse_icmp_response(const uint8_t *icmp, size_t message_len, struct p
     return 1;
 }
 
-/**
- * Main function to parse a network packet and extract relevant information into a parsed_info structure.
- * This function handles fields from Ethernet,IPv4, TCP, UDP, and ICMP protocols.
- */
+
 int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int datalink, struct parsed_info *parsed) {
     if (parsed == NULL) {
         return -1;
@@ -562,61 +535,4 @@ int parse_packet(const u_char *bytes, const struct pcap_pkthdr *header, int data
 
     *parsed = parsed_res;
     return 1;
-}
-
-/**
- * Function used for debugging purposes to print the parsed packet information in a human-readable format.
- */
-void print_test(struct parsed_info parsed_res) {
-    printf("Parsed TCP Packet Information:\n");
-    printf("Source IP: %s\n", inet_ntoa(parsed_res.src_ip));
-    printf("Destination IP: %s\n", inet_ntoa(parsed_res.dst_ip));
-    printf("IP ID: %u\n", parsed_res.ip_id);
-    printf("IP TTL: %u\n", parsed_res.ip_ttl);
-    printf("IP Total Length: %u\n", parsed_res.ip_tot_length);
-    printf("IP Header Length: %u\n", parsed_res.ip_hdr_length);
-    printf("IP Fragment Offset + Flags: 0b%016b\n", parsed_res.ip_fragoff);
-
-    printf("TCP Source Port: %u\n", parsed_res.app_protocol.tcp_ap.src_port);
-    printf("TCP Destination Port: %u\n", parsed_res.app_protocol.tcp_ap.dst_port);
-    printf("TCP Sequence Number: %u\n", parsed_res.app_protocol.tcp_ap.seq);
-    printf("TCP Acknowledgment Number: %u\n", parsed_res.app_protocol.tcp_ap.ack);
-    printf("TCP Window Size: %u\n", parsed_res.app_protocol.tcp_ap.win_size);
-    printf("TCP Flags: 0x%02X\n", parsed_res.app_protocol.tcp_ap.flags);
-    printf("TCP Header Length (Data Offset): %u bytes\n", parsed_res.app_protocol.tcp_ap.offset * 4u);
-    printf("TCP Reserved Bits: 0x%02X\n", parsed_res.app_protocol.tcp_ap.reserved);
-    printf("TCP Urgent Pointer: %u\n", parsed_res.app_protocol.tcp_ap.urg_pointer);
-
-    if (parsed_res.app_protocol.tcp_ap.options_len > 0) {
-        printf("TCP Options Length: %u bytes\n", parsed_res.app_protocol.tcp_ap.options_len);
-        if (parsed_res.app_protocol.tcp_ap.timestamp_present) {
-            printf("Timestamp Option Present:\n");
-            printf("TSval: %u, TSecr: %u\n", parsed_res.app_protocol.tcp_ap.tsval, parsed_res.app_protocol.tcp_ap.tsecr);
-        } else {
-            printf("Timestamp Option Not Present.\n");
-        }
-        printf("TCP Options (Hex): ");
-        for (size_t i = 0; i < parsed_res.app_protocol.tcp_ap.options_len; ++i) {
-            printf("%02X ", parsed_res.app_protocol.tcp_ap.options[i]);
-            if ((i + 1) % 16 == 0) {
-                printf("\n");
-            }
-        }
-        printf("\n");
-    } else {
-        printf("No TCP Options Present.\n");
-    }
-
-    if (parsed_res.app_protocol.tcp_ap.payload_len > 0) {
-        printf("TCP Payload Length: %zu bytes\n", parsed_res.app_protocol.tcp_ap.payload_len);
-        for (size_t i = 0; i < parsed_res.app_protocol.tcp_ap.payload_len; ++i) {
-            printf("%02X ", parsed_res.app_protocol.tcp_ap.payload[i]);
-            if ((i + 1) % 16 == 0) {
-                printf("\n");
-            }
-        }
-        printf("\n");
-    } else {
-        printf("No TCP Payload Present.\n");
-    }
 }

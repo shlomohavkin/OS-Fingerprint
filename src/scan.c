@@ -179,8 +179,11 @@ static int prepare_u1_probe(struct scan_state *scan, const struct scan_config *c
     return 0;
 }
 
+
 /**
- * Called the functions to prepare all probes and construct their packets.
+ * Calls the functions: prepare_sequence_probes, prepare_ie_probes, 
+ * prepare_ecn_probe, prepare_t_probes, and prepare_u1_probe
+ * to prepare all probes and construct their packets.
  * @return 0 on success, -1 on failure.
  */
 int prepare_probes(struct scan_state *scan, const struct scan_config *config) {
@@ -198,7 +201,7 @@ int prepare_probes(struct scan_state *scan, const struct scan_config *config) {
 }
 
 /**
- * Initialize the network for the scan.
+ * Open the network for the scan.
  * @return 0 on success, -1 on failure.
  */
 int open_scan_network(struct network *net, const struct scan_config *config) {

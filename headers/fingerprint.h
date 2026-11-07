@@ -129,6 +129,10 @@ struct u1_fingerprint {
     bool RUD_test;
 };
 
+/**
+ * The main structure for representing an OS fingerprint.
+ * It contains the results of various tests performed on the received responses to the probes.
+ */
 struct os_fingerprint {
     struct seq_fingerprint seq;       // SEQ test 
     struct ecn_fingerprint ecn;       // ECN
@@ -145,14 +149,34 @@ struct os_fingerprint {
     bool win_present[SEQ_PROBE_COUNT];
 };
 
-
+/**
+ * The main function to calculate the OS fingerprint based on the received responses to the probes.
+ * It calculates the U1, SEQ, T2-T7, IE, and ECN tests and returns the result in the provided os_fingerprint structure.
+ * @param probes The array of probe results.
+ * @return The calculated os_fingerprint structure. If the probes are NULL or if any of the tests fail,
+ * the valid field in the returned structure will be set to false, indicating an invalid fingerprint.
+ */
 struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes);
+
+/**
+ * Function to generate the string representation of the OS fingerprint based on the received responses to the probes.
+ * It calculates the OS fingerprint and returns the result in the provided buffer.
+ * The function calls the fingerprint formating function to format the fingerprint into a string.
+ * @param probes The array of probe results.
+ * @param buffer The buffer to store the string representation of the fingerprint.
+ * @param capacity The capacity of the buffer.
+ * @return The number of characters written to the buffer (excluding the null terminator) if successful, 
+ * or -1 on error (e.g., invalid arguments or invalid fingerprint).
+ */
 int generate_fingerprint_string(struct probe_result *probes, char *buffer, size_t capacity);
 
 
-// Helper functions for fingerprint calculations
-// This function arent intended to be used outside of the fingerprinting 
-// module, but are declared here for testing purposes.
+
+/* Helper functions for fingerprint calculations
+ * This function arent intended to be used outside of the fingerprinting 
+ * module, but are declared here for testing purposes.
+ */
+
 enum ip_id_test_type {
     IP_ID_TEST_TI,
     IP_ID_TEST_CI,
@@ -170,4 +194,6 @@ int calculate_t_tests(struct probe_result probe, struct tcp_fingerprint *tcp_fin
 int calculate_ecn_fingerprint(struct probe_result probe, struct ecn_fingerprint *ecn_fingerprint);
 int calculate_ie_fingerprint(struct probe_result probes[2], struct ie_fingerprint *ie_fingerprint);
 int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint *u1_fingerprint);
+
+
 #endif 

@@ -284,10 +284,7 @@ int match_expression_slice( const char *observed, size_t observed_len, const cha
     return matched ? 1 : 0;
 }
 
-/**
- * The main function that calls the recursive match_expression_slice function. 
- * It checks for NULL pointers and returns -1 for invalid input.
- */
+
 int match_expression(const char *observed, const char *expression, bool tcp_options) {
     if (observed == NULL || expression == NULL) {
         return -1;
@@ -442,12 +439,7 @@ static int retain_best_match(struct os_match *best_matches, size_t *match_count,
     return 0;
 }
 
-/**
- * The main function that is called to find the best OS matches based on 
- * the observed fingerprint and the reference database. This function reads the database, 
- * compares the fingerprints, and retains the best matches.
- * @return 0 on success, -1 on error.
- */
+
 int find_os_matches(const char *database_path, const char *observed_fingerprint_string, struct os_match *best_matches, const size_t max_matches, size_t *match_count) {
     if (database_path == NULL || observed_fingerprint_string == NULL || best_matches == NULL || match_count == NULL) {
         return -1;
@@ -536,9 +528,7 @@ int find_os_matches(const char *database_path, const char *observed_fingerprint_
     return 0;
 }
 
-/**
- * Function to free the memory allocated for the best_matches array.
- */
+
 void free_os_matches(struct os_match *matches, size_t match_count) {
     if (matches == NULL) {
         return;

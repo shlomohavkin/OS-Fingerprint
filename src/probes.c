@@ -6,11 +6,10 @@
  * and other relevant fields.
  */
 
+
 #include <probes.h>
 
-/**
- * Function to generate the specifications for the sequence TCP probes (SEQ).
- */
+
 struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
     struct tcp_probe *tcp_probes = malloc(6 * sizeof(struct tcp_probe));
     if (tcp_probes == NULL) {
@@ -156,9 +155,7 @@ struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t de
     return tcp_probes;
 }
 
-/**
- * Function to generate the specifications for the ICMP echo probes (IE).
- */
+
 struct icmp_probe *ICMP_echo_probe_spec(char *dest_ip) {
     struct icmp_probe *icmp_probes = malloc(2 * sizeof(struct icmp_probe));
     srand((unsigned)time(NULL));
@@ -197,9 +194,7 @@ struct icmp_probe *ICMP_echo_probe_spec(char *dest_ip) {
     return icmp_probes;
 }
 
-/**
- * Function to generate the specifications for the ECN TCP probe.
- */
+
 struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
     struct tcp_probe tcp_probe = {0};
 
@@ -229,9 +224,7 @@ struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, ch
     return tcp_probe;
 }
 
-/**
- * Function to generate the specifications for the T2-T7 TCP probes.
- */
+
 struct tcp_probe *tcp_t_probes_spec(uint16_t source_port, uint16_t open_port, uint16_t closed_port, char *dest_ip) {
     struct tcp_probe *tcp_probes = malloc(6 * sizeof(struct tcp_probe));
     if (tcp_probes == NULL) {
@@ -378,9 +371,7 @@ struct tcp_probe *tcp_t_probes_spec(uint16_t source_port, uint16_t open_port, ui
     return tcp_probes;
 }
 
-/**
- * Function to generate the specifications for the U1 UDP probe.
- */
+
 struct udp_probe udp_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip) {
     struct udp_probe udp_probe = {0};
 

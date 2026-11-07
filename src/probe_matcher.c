@@ -103,11 +103,7 @@ static bool response_matches_probe(const struct probe_result *probe, const struc
     }
 }
 
-/**
- * Matches the received responses to the sent probes based on their specifications.
- * Updates the probe_result structures with the parsed responses and their statuses.
- * @return The number of matched responses, or -1 on failure.
- */
+
 int match_probe_responses(struct probe_result *probe_res, struct parsed_info *parsed_res, size_t probe_count, size_t response_count, struct in_addr source_ip) {
     if ((probe_res == NULL && probe_count != 0) ||
         (parsed_res == NULL && response_count != 0)) {

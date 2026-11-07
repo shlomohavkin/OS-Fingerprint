@@ -958,13 +958,7 @@ int calculate_u1_fingerprint(struct probe_result u1_probe, struct u1_fingerprint
     return 1;
 }
 
-/**
- * The main function to calculate the OS fingerprint based on the received responses to the probes.
- * It calculates the U1, SEQ, T2-T7, IE, and ECN tests and returns the result in the provided os_fingerprint structure.
- * @param probes The array of probe results.
- * @return The calculated os_fingerprint structure. If the probes are NULL or if any of the tests fail,
- * the valid field in the returned structure will be set to false, indicating an invalid fingerprint.
- */
+
 struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     struct os_fingerprint fingerprint = {0};
     T_hops = UNAVAILABLE_SIG_16;
@@ -1049,13 +1043,7 @@ struct os_fingerprint calculate_os_fingerprint(struct probe_result *probes) {
     return fingerprint;
 }
 
-/**
- * Function to generate the string representation of the OS fingerprint based on the received responses to the probes.
- * It calculates the OS fingerprint and returns the result in the provided buffer.
- * The function calls the fingerprint formating function to format the fingerprint into a string.
- * @return The number of characters written to the buffer (excluding the null terminator) if successful, 
- * or -1 on error (e.g., invalid arguments or invalid fingerprint).
- */
+
 int generate_fingerprint_string(struct probe_result *probes, char *buffer, size_t capacity) {
     if (probes == NULL || buffer == NULL || capacity == 0) {
         return -1;

@@ -54,10 +54,34 @@ struct udp_probe {
     size_t payload_len;
 };
 
+/**
+ * Function to generate the specifications for the sequence TCP probes (SEQ).
+ * @return Pointer to an array of 6 TCP probes.
+ */
 struct tcp_probe *sequence_generation_TCP_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
+
+/**
+ * Function to generate the specifications for the ICMP echo probes (IE).
+ * @return Pointer to an array of 2 ICMP probes.
+ */
 struct icmp_probe *ICMP_echo_probe_spec(char *dest_ip);
+
+/**
+ * Function to generate the specifications for the T2-T7 TCP probes.
+ * @return Pointer to an array of 6 TCP probes.
+ */
 struct tcp_probe tcp_ecn_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
+
+/**
+ * Function to generate the specifications for the T2-T7 TCP probes.
+ * @return Pointer to an array of 6 TCP probes.
+ */
 struct tcp_probe *tcp_t_probes_spec(uint16_t source_port, uint16_t open_port, uint16_t closed_port, char *dest_ip);
+
+/**
+ * Function to generate the specifications for the U1 UDP probe.
+ * @return The UDP probe specification.
+ */
 struct udp_probe udp_probe_spec(uint16_t source_port, uint16_t dest_port, char *dest_ip);
 
 

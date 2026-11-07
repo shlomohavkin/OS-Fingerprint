@@ -56,6 +56,7 @@ static int parse_port(const char *text, uint16_t *port) {
     return 0;
 }
 
+
 int main(int argc, char **argv) {
     srand((unsigned)time(NULL));
 
@@ -136,8 +137,13 @@ int main(int argc, char **argv) {
         goto cleanup;
 
     // Collect the responses to the sent probes and match them to the sent probes.
-    if (collect_responses(&net, &scan, &config) < 0)
+    int matched = collect_responses(&net, &scan, &config);
+    if (matched < 0)
         goto cleanup;
+    else if (matched == 0) {
+        fprintf(stderr, "Couldn't identify the OS of the target %s.\n", config.target_ip);
+        goto cleanup;
+    }
 
     
     // Fingerprint Generation

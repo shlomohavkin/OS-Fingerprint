@@ -56,8 +56,10 @@ static int prepare_sequence_probes(struct scan_state *scan, const struct scan_co
             free(specs);
             return -1;
         }
-        printf("Constructed Sequence TCP packet number %zu of length: %zu bytes\n", i + 1, scan->packets[i].length);
     }
+    printf("Constructed 6 Sequence TCP packets of lengths: %zu, %zu, %zu, %zu, %zu, %zu bytes\n",
+           scan->packets[0].length, scan->packets[1].length, scan->packets[2].length,
+           scan->packets[3].length, scan->packets[4].length, scan->packets[5].length);
 
     /* TCP options are dynamically allocated in sequence_generation_TCP_spec, 
     so we can free the specs array now. and they are still saved in the scan state structure */
@@ -95,8 +97,8 @@ static int prepare_ie_probes(struct scan_state *scan, const struct scan_config *
             fprintf(stderr, "Failed to construct ICMP probe %zu\n", i + 1);
             return -1;
         }
-        printf("Constructed ICMP packet number %zu of length: %zu bytes\n", i + 1, packet->length);
     }
+    printf("Constructed 2 ICMP packets of lengths: %zu, %zu bytes\n", scan->packets[IE1].length, scan->packets[IE1 + 1].length);
     return 0;
 }
 
@@ -113,8 +115,7 @@ static int prepare_ecn_probe(struct scan_state *scan, const struct scan_config *
     if (prepare_tcp_probe(scan, config, ECN, spec) < 0)
         return -1;
 
-    printf("Constructed ECN TCP packet of length: %zu bytes\n",
-           scan->packets[ECN].length);
+    printf("Constructed ECN TCP packet of length: %zu bytes\n", scan->packets[ECN].length);
     return 0;
 }
 
@@ -138,8 +139,12 @@ static int prepare_t_probes(struct scan_state *scan, const struct scan_config *c
             free(specs);
             return -1;
         }
-        printf("Constructed T%zu TCP packet of length: %zu bytes\n", i + 2, scan->packets[T2 + i].length);
     }
+    printf("Constructed T2-T7 TCP packets of lengths: %zu, %zu, %zu, %zu, %zu, %zu bytes\n",
+           scan->packets[T2].length, scan->packets[T3].length, scan->packets[T4].length,
+           scan->packets[T5].length, scan->packets[T6].length, scan->packets[T7].length);
+
+
     free(specs); // Free the specs array after copying the probes into scan->results
     return 0;
 }
@@ -228,8 +233,8 @@ static int send_one_probe(struct network *net, struct scan_state *scan, size_t i
  */
 int send_probes(struct network *net, struct scan_state *scan, const struct scan_config *config) {
     // Send Sequence TCP Probes
+    printf("Sending 6 SEQ TCP packets to: %s\n", config->target_ip);
     for (size_t i = 0; i < SEQ_PROBE_COUNT; i++) {
-        printf("Sending sequence TCP packet %zu to: %s\n", i + 1, config->target_ip);
         if (send_one_probe(net, scan, i, config) < 0)
             return -1;
         if (i + 1 < SEQ_PROBE_COUNT)
@@ -249,14 +254,14 @@ int send_probes(struct network *net, struct scan_state *scan, const struct scan_
         return -1;
 
     // Send T2-T7 TCP Probes
+    printf("Sending T2-T7 TCP packets to: %s\n", config->target_ip);
     for (size_t i = 0; i < TX_COUNT; i++) {
-        printf("Sending T%zu TCP packet to: %s\n", i + 2, config->target_ip);
         if (send_one_probe(net, scan, T2 + i, config) < 0)
             return -1;
     }
     
     // Send U1 UDP Probe
-    printf("Sending UDP packet to: %s\n", config->target_ip);
+    printf("Sending U1 UDP packet to: %s\n", config->target_ip);
     if (send_one_probe(net, scan, U1, config) < 0)
         return -1;
 
@@ -326,10 +331,15 @@ int collect_responses(struct network *net, struct scan_state *scan, const struct
         matched_count += (size_t)matched;
     }
 
+    if (matched_count == 0) {
+        fprintf(stderr, "No responses received within the timeout period of %.2f seconds.\n", config->receive_timeout);
+        return 0;
+    } 
+
     printf("\nMatched %zu of %zu pending probes\n", matched_count, pending_count);
     for (size_t i = 0; i < NUM_PROBES_SENT; i++) {
         if (scan->results[i].status == PROBE_NO_RESPONSE)
-            printf("No response for probe at index %zu\n", i);
+            printf("No response for probe number %zu\n", i);
     }
     printf("\n");
     return (int)matched_count;

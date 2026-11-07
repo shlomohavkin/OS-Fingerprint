@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#define PARSED       1   // packet parsed successfully
+#define PARSED       1  
 #define NOT_PARSED   0   // packet ignored (unsupported, truncated or malformed)
-#define INVALID     -1   // invalid arguments
+#define INVALID     -1   
 
 // Byte offsets inside an Ethernet frame that holds an IPv4 packet with a 20 byte IP header
 #define ETH_LEN               14
@@ -163,7 +163,8 @@ static void test_parse_tcp(void) {
     free_parsed_info(&parsed);
 }
 
-// Round trip for ICMP: echo request/reply and destination unreachable.
+// Create the ICMP packets using creation fucntions and then check
+// that they are parsed correctly: echo request/reply and destination unreachable.
 static void test_parse_icmp(void) {
     uint8_t frame[128];
     struct parsed_info parsed;
@@ -192,7 +193,7 @@ static void test_parse_icmp(void) {
     }
 
     // Destination unreachable: the first 4 bytes after the checksum are "unused"
-    // (here the echo identifier and sequence), followed by the quoted IP header
+    // followed by the quoted IP header
     size_t len = icmp_frame(frame, make_icmp_spec());
     assert(parse_frame(frame, len, &parsed) == PARSED);
     assert(parsed.app_protocol.icmp_ap.type == ICMP_DEST_UNREACH);
@@ -203,7 +204,7 @@ static void test_parse_icmp(void) {
     free_parsed_info(&parsed);
 }
 
-// Every way a packet can be rejected, by changing one byte (or the length) of a valid frame.
+// Every way a packet can be rejected, by changing one byte or the length of a valid frame.
 static void test_rejected_packets(void) {
     uint8_t tcp[128];
     uint8_t icmp[128];

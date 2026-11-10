@@ -7,3 +7,7 @@ to an existing large database of operating system-fingerprint entries to find th
 The program outputs the 10 most probable operating systems for the specified ip address.
 
 The project is written in C and developed and tested on Ubuntu 24.04 LTS, using Linux networking APIs.
+
+How to run the project:
+run ./os-fingerprint with root permissions, specify the ip and closed and open ports in the format: 
+./os-fingerprint <ip-address> <open port>,<closed port> 

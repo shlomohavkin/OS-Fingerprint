@@ -1,15 +1,15 @@
-# Compiled program and build files
+# compiled program and build files
 /os-fingerprint
 /build/
 *.o
 *.a
 *.so
 
-# Crash dumps
+# crash dumps
 core
 core.*
 
-# Local secrets
+# local data
 .env
 *Zone.Identifier
 .vscode
